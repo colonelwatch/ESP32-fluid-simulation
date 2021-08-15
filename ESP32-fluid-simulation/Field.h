@@ -58,7 +58,7 @@ T Field<T, bc>::index(int i, int j) const{
 
 template<class T, BoundaryCondition bc>
 void Field<T, bc>::update_boundary(){
-    int factor;
+    float factor;
     if(bc == ZERO) factor = 0;
     else if(bc == CLONE) factor = 1;
     else factor = -1; // this->bc == NEGATIVE

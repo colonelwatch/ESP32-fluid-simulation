@@ -7,6 +7,7 @@
 
 #include <Adafruit_Protomatter.h>
 
+#include "q15.h"
 #include "Vector.h"
 #include "Field.h"
 #include "operations.h"
@@ -17,11 +18,11 @@
 
 typedef Vector<float> FloatVector;
 
-uint8_t rgbPins[]  = {25, 27, 26, 14, 13, 12};
-uint8_t addrPins[] = {23, 19, 5, 17, 32};
-uint8_t clockPin   = 16; // Must be on same port as rgbPins
-uint8_t latchPin   = 4;
-uint8_t oePin      = 15;
+unsigned char rgbPins[]  = {25, 27, 26, 14, 13, 12};
+unsigned char addrPins[] = {23, 19, 5, 17, 32};
+unsigned char clockPin   = 16; // Must be on same port as rgbPins
+unsigned char latchPin   = 4;
+unsigned char oePin      = 15;
 
 Adafruit_Protomatter matrix(
   64,          // Width of matrix (or matrix chain) in pixels
@@ -29,11 +30,12 @@ Adafruit_Protomatter matrix(
   1, rgbPins,  // # of matrix chains, array of 6 RGB pins for each
   5, addrPins, // # of address pins (height is inferred), array of pins
   clockPin, latchPin, oePin, // Other matrix control pins
-  false        // No double-buffering here (see "doublebuffer" example)
+  true        // No double-buffering here (see "doublebuffer" example)
 );
 
-Field<float, CLONE> *red_field, *green_field, *blue_field, *temp_scalar_field;
+Field<q15_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
 Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
+Field<float, CLONE> *temp_scalar_field;
 
 unsigned long t_start, t_end;
 int refreshes = 0;
@@ -49,7 +51,7 @@ void Task1code( void * pvParameters ){
 }
 
 // https://learn.adafruit.com/led-tricks-gamma-correction/the-quick-fix
-const uint8_t gamma8[] = {
+const unsigned char gamma8[] = {
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
     1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
@@ -67,14 +69,14 @@ const uint8_t gamma8[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
-void draw_color_field(const Field<float, CLONE> *red_field, const Field<float, CLONE> *green_field, const Field<float, CLONE> *blue_field){
+void draw_color_field(const Field<q15_t, CLONE> *red_field, const Field<q15_t, CLONE> *green_field, const Field<q15_t, CLONE> *blue_field){
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      int r = 255*red_field->index(i, j);
+      int r = red_field->index(i, j).as_int() >> 7;
       r = gamma8[r];
-      int g = 255*green_field->index(i, j);
+      int g = green_field->index(i, j).as_int() >> 7;
       g = gamma8[g];
-      int b = 255*blue_field->index(i, j);
+      int b = blue_field->index(i, j).as_int() >> 7;
       b = gamma8[b];
       matrix.drawPixel(j, i, matrix.color565(r, g, b));
     }
@@ -89,26 +91,29 @@ void setup(void) {
   delay(1000);
   
   Serial.println("Allocating fields...");
-  red_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  green_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  blue_field = new Field<float, CLONE>(N_ROWS, N_COLS);
+  Serial.print("Remaining contiguous heap: ");
+  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  red_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
+  green_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
+  blue_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
+  temp_color_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
   Serial.print("Color fields allocated! Remaining contiguous heap: ");
-  Serial.println(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   velocity_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
   temp_vector_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
   Serial.print("Vector fields allocated! Remaining contiguous heap: ");
-  Serial.println(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   temp_scalar_field = new Field<float, CLONE>(N_ROWS, N_COLS);
   Serial.print("Pressure fields allocated! Remaining contiguous heap: ");
-  Serial.println(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   
-  Serial.println("Zeroing color and velocity fields...");
+  Serial.println("Setting color and velocity fields...");
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      red_field->index(i, j) = i <= center_i ? 0 : j > center_j ? 0 : 1;
-      green_field->index(i, j) = j <= center_j ? 0 : i <= center_i ? 1 : 0;
-      blue_field->index(i, j) = i <= center_i ? j <= center_j ? 1 : 0 : 0;
+      red_field->index(i, j) = i <= center_i ? 0.0 : j > center_j ? 0.0 : 1.0;
+      green_field->index(i, j) = j <= center_j ? 0.0 : i <= center_i ? 1.0 : 0.0;
+      blue_field->index(i, j) = i <= center_i ? j <= center_j ? 1.0 : 0.0 : 0.0;
 
       velocity_field->index(i, j) = {0, 0};
     }
@@ -147,12 +152,12 @@ void loop(void) {
   *velocity_field -= *temp_vector_field;
 
   // Advect the color field
-  advect(temp_scalar_field, red_field, velocity_field, DT);
-  *red_field = *temp_scalar_field;
-  advect(temp_scalar_field, green_field, velocity_field, DT);
-  *green_field = *temp_scalar_field;
-  advect(temp_scalar_field, blue_field, velocity_field, DT);
-  *blue_field = *temp_scalar_field;
+  advect(temp_color_field, red_field, velocity_field, DT);
+  *red_field = *temp_color_field;
+  advect(temp_color_field, green_field, velocity_field, DT);
+  *green_field = *temp_color_field;
+  advect(temp_color_field, blue_field, velocity_field, DT);
+  *blue_field = *temp_color_field;
 
   // Render the color field and display it
   matrix.fillScreen(0);
