@@ -14,6 +14,8 @@
 #define DT 0.001
 #define OUTPUT_FPS 60
 
+typedef Vector<float> FloatVector;
+
 int main(){
     // Initialize the color field
     int center_i = N_ROWS/2, center_j = N_COLS/2;
@@ -29,12 +31,12 @@ int main(){
     color_field = (float*)color_arr;
 
     // Initialize the velocity field
-    Vector zero_arr[N_ROWS][N_COLS] = {0};
-    Field<Vector, NEGATIVE> velocity_field(N_ROWS, N_COLS);
-    velocity_field = (Vector*)zero_arr;
+    FloatVector zero_arr[N_ROWS][N_COLS] = {0};
+    Field<FloatVector, NEGATIVE> velocity_field(N_ROWS, N_COLS);
+    velocity_field = (FloatVector*)zero_arr;
 
     // Declare the other fields
-    Field<Vector, NEGATIVE> temp_vector_field(N_ROWS, N_COLS);
+    Field<FloatVector, NEGATIVE> temp_vector_field(N_ROWS, N_COLS);
     Field<float, CLONE> temp_scalar_field(N_ROWS, N_COLS);
     Field<float, CLONE> pressure_field(N_ROWS, N_COLS);
 
@@ -57,7 +59,7 @@ int main(){
         // Apply a force in the center of the velocity field for a little time
         if(i < 0.1/DT){
             const int center_i = N_ROWS/2, center_j = N_COLS/2;
-            Vector dv = Vector({0, 10});
+            FloatVector dv = FloatVector({0, 10});
             velocity_field.index(center_i, center_j) += dv;
             velocity_field.index(center_i+1, center_j) += dv;
             velocity_field.index(center_i, center_j+1) += dv;

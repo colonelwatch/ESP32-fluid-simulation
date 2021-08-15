@@ -18,6 +18,8 @@
 #define N_COLS 64
 #define DT 0.1
 
+typedef Vector<float> FloatVector;
+
 uint8_t rgbPins[]  = {25, 27, 26, 14, 13, 12};
 uint8_t addrPins[] = {23, 19, 5, 17, 32};
 uint8_t clockPin   = 16; // Must be on same port as rgbPins
@@ -34,7 +36,7 @@ Adafruit_Protomatter matrix(
 );
 
 Field<float, CLONE> *color_field, *temp_scalar_field;
-Field<Vector, NEGATIVE> *velocity_field, *temp_vector_field;
+Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
 
 unsigned long t_start, t_end;
 int refreshes = 0;
@@ -68,8 +70,8 @@ void setup(void) {
   Serial.println("Allocating fields...");
   color_field = new Field<float, CLONE>(N_ROWS, N_COLS);
   temp_scalar_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  velocity_field = new Field<Vector, NEGATIVE>(N_ROWS, N_COLS);
-  temp_vector_field = new Field<Vector, NEGATIVE>(N_ROWS, N_COLS);
+  velocity_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
+  temp_vector_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
   
   Serial.println("Filling color field...");
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
@@ -96,7 +98,7 @@ void loop(void) {
 
   // Apply a force in the center of the screen if the BOOT button is pressed
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
-  Vector dv = Vector({0, 10});
+  FloatVector dv = FloatVector({0, 10});
   if(digitalRead(0) == LOW){
     velocity_field->index(center_i, center_j) += dv;
     velocity_field->index(center_i+1, center_j) += dv;
@@ -108,7 +110,7 @@ void loop(void) {
   #ifdef AGGRESSIVE_DEALLOCATION
   delete temp_vector_field;
   jacobi_pressure(temp_scalar_field, velocity_field);
-  temp_vector_field = new Field<Vector, NEGATIVE>(N_ROWS, N_COLS);
+  temp_vector_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
   #else
   jacobi_pressure(temp_scalar_field, velocity_field);
   #endif
