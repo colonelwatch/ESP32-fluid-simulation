@@ -84,33 +84,18 @@ void jacobi_pressure(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_b
 
     // the bc is not relevant in temporary fields because update_boundary is never called
     // TODO: Implement a DONTCARE BoundaryCondition for temporary fields?
-    Field<SCALAR_T, CLONE> new_pressure(N_i, N_j);
+    Field<SCALAR_T, CLONE> new_pressure(N_i, N_j), divergence_field(N_i, N_j);
 
     for(int i = 0; i < N_i; i++)
         for(int j = 0; j < N_j; j++)
             output->index(i, j) = 0;
     output->update_boundary();
-
-    #ifndef INLINE_DIVERGENCE_IN_JACOBI
-    Field<SCALAR_T, CLONE> divergence_field(N_i, N_j);
     divergence(&divergence_field, input);
-    #endif
 
     for(int k = 0; k < iterations; k++){
         for(int i = 0; i < N_i; i++){
             for(int j = 0; j < N_j; j++){
-                #ifdef INLINE_DIVERGENCE_IN_JACOBI
-                SCALAR_T upflow, downflow, leftflow, rightflow;
-                downflow = -input->index(i+1, j).y;
-                upflow = input->index(i-1, j).y;
-                leftflow = -input->index(i, j-1).x;
-                rightflow = input->index(i, j+1).x;
-
-                SCALAR_T divergence = (upflow+downflow+leftflow+rightflow)/2;
-                #else
                 SCALAR_T divergence = divergence_field.index(i, j);
-                #endif
-
                 SCALAR_T up, down, left, right;
                 up = output->index(i-1, j);
                 down = output->index(i+1, j);
