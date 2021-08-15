@@ -38,11 +38,13 @@ int main(){
     Field<float, CLONE> temp_scalar_field(N_ROWS, N_COLS);
     Field<float, CLONE> pressure_field(N_ROWS, N_COLS);
 
+    #ifndef NO_FILE_OUTPUT
     // Open files for output
     std::ofstream velocity_file("velocity.txt"), 
                   pressure_file("pressure.txt"), 
                   divergence_file("divergence.txt"),
                   color_file("color.txt");
+    #endif
     
     const int total_timesteps = SECONDS/DT;
     const int timesteps_per_frame = 1/(OUTPUT_FPS*DT);
@@ -71,6 +73,7 @@ int main(){
         advect(&temp_scalar_field, &color_field, &velocity_field, DT);
         color_field = temp_scalar_field;
 
+        #ifndef NO_FILE_OUTPUT
         if(i % timesteps_per_frame == 0){
             // Output velocity and pressure fields
             velocity_file << velocity_field.toString(2) << "\n\n";
@@ -83,13 +86,16 @@ int main(){
             // Output the color field
             color_file << color_field.toString(2) << "\n\n";
         }
+        #endif
     }
 
+    #ifndef NO_FILE_OUTPUT
     // Close the files
     velocity_file.close();
     pressure_file.close();
     divergence_file.close();
     color_file.close();
+    #endif
 
     std::cout << "Simulation done!" << std::endl;
         
