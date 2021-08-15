@@ -2,6 +2,12 @@
 //  seems to improve performance significantly. To use it, copy it into:
 //  C:\Users\%USERPROFILE%\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.4
 
+// Aggressive memory optimizations options.
+//  Each of these options saves about 4096 bytes of memory, which is either one additional
+//  color bit OR one additional field. Will impact performance significantly.
+#define INLINE_DIVERGENCE_IN_JACOBI // Calculate divergence repeatedly instead of beforehand (affects operations.h)
+#define AGGRESSIVE_DEALLOCATION // Temporarily deallocate vector field during memory-intensive jacobi iteration
+
 #include <Adafruit_Protomatter.h>
 
 #include "Vector.h"
@@ -20,14 +26,13 @@ uint8_t oePin      = 15;
 
 Adafruit_Protomatter matrix(
   64,          // Width of matrix (or matrix chain) in pixels
-  3,           // Bit depth, 1-6
+  6,           // Bit depth, 1-6
   1, rgbPins,  // # of matrix chains, array of 6 RGB pins for each
   5, addrPins, // # of address pins (height is inferred), array of pins
   clockPin, latchPin, oePin, // Other matrix control pins
   true        // No double-buffering here (see "doublebuffer" example)
 );
 
-uint16_t buffer[N_ROWS*N_COLS] = {0};
 Field<float, CLONE> *color_field, *temp_scalar_field;
 Field<Vector, NEGATIVE> *velocity_field, *temp_vector_field;
 
@@ -47,9 +52,8 @@ void Task1code( void * pvParameters ){
 void draw_color_field(const Field<float, CLONE> *field){
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      float color_ij = field->index(i, j);
-      uint8_t mapped_color_ij = color_ij*255;
-      matrix.drawPixel(j, i, matrix.color565(0, 0, mapped_color_ij));
+      int color_ij = 255*field->index(i, j); // mapped within [0, 255]
+      matrix.drawPixel(j, i, matrix.color565(0, 0, color_ij));
     }
   }
 }
@@ -101,7 +105,13 @@ void loop(void) {
   }
 
   // Zero out the divergence of the new velocity field
+  #ifdef AGGRESSIVE_DEALLOCATION
+  delete temp_vector_field;
   jacobi_pressure(temp_scalar_field, velocity_field);
+  temp_vector_field = new Field<Vector, NEGATIVE>(N_ROWS, N_COLS);
+  #else
+  jacobi_pressure(temp_scalar_field, velocity_field);
+  #endif
   gradient(temp_vector_field, temp_scalar_field);
   *velocity_field -= *temp_vector_field;
 

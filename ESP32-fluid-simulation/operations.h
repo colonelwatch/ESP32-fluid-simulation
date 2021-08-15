@@ -62,14 +62,6 @@ void laplacian(Field<T, out_bc> *output, const Field<T, in_bc> *input){
     output->update_boundary();
 }
 
-template<class VECTOR_T, BoundaryCondition bc>
-void apply_global_force(Field<VECTOR_T, bc> *field, VECTOR_T force, float dt){
-    for(int i = 0; i < field->N_i; i++)
-        for(int j = 0; j < field->N_j; j++)
-            field->index(i, j) += force*dt;
-    field->update_boundary();
-}
-
 template<class SCALAR_T, BoundaryCondition out_bc, class VECTOR_T, BoundaryCondition in_bc>
 void divergence(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_bc> *input){
     for(int i = 0; i < output->N_i; i++){
@@ -92,24 +84,40 @@ void jacobi_pressure(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_b
 
     // the bc is not relevant in temporary fields because update_boundary is never called
     // TODO: Implement a DONTCARE BoundaryCondition for temporary fields?
-    Field<SCALAR_T, CLONE> new_pressure(N_i, N_j), divergence_field(N_i, N_j);
+    Field<SCALAR_T, CLONE> new_pressure(N_i, N_j);
 
     for(int i = 0; i < N_i; i++)
         for(int j = 0; j < N_j; j++)
             output->index(i, j) = 0;
     output->update_boundary();
+
+    #ifndef INLINE_DIVERGENCE_IN_JACOBI
+    Field<SCALAR_T, CLONE> divergence_field(N_i, N_j);
     divergence(&divergence_field, input);
+    #endif
 
     for(int k = 0; k < iterations; k++){
         for(int i = 0; i < N_i; i++){
             for(int j = 0; j < N_j; j++){
+                #ifdef INLINE_DIVERGENCE_IN_JACOBI
+                SCALAR_T upflow, downflow, leftflow, rightflow;
+                downflow = -input->index(i+1, j).y;
+                upflow = input->index(i-1, j).y;
+                leftflow = -input->index(i, j-1).x;
+                rightflow = input->index(i, j+1).x;
+
+                SCALAR_T divergence = (upflow+downflow+leftflow+rightflow)/2;
+                #else
+                SCALAR_T divergence = divergence_field.index(i, j);
+                #endif
+
                 SCALAR_T up, down, left, right;
                 up = output->index(i-1, j);
                 down = output->index(i+1, j);
                 left = output->index(i, j-1);
                 right = output->index(i, j+1);
 
-                new_pressure.index(i, j) = (up+down+left+right-divergence_field.index(i, j))/4;
+                new_pressure.index(i, j) = (up+down+left+right-divergence)/4;
             }
         }
         *output = new_pressure;
