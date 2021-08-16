@@ -49,9 +49,9 @@ class q15_t{
             return temp/rhs._value;
         }
 
-        int16_t as_int() const{ return _value; }
+        int32_t as_int() const{ return _value; }
     private:
-        int16_t _value;
+        int32_t _value;
 };
 
 inline q15_t operator*(const int &lhs, const q15_t &rhs){

@@ -33,6 +33,15 @@ Adafruit_Protomatter matrix(
   true        // No double-buffering here (see "doublebuffer" example)
 );
 
+template<>
+Field<q15_t, CLONE>::Field(int N_i, int N_j){
+    this->N_i = N_i;
+    this->N_j = N_j;
+    this->_nontrivial_elems = N_i*N_j;
+    this->_total_elems = (N_i+2)*(N_j+2);
+    this->_arr = (q15_t*)heap_caps_malloc(sizeof(q15_t)*this->_total_elems, MALLOC_CAP_32BIT);
+}
+
 Field<q15_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
 Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
 Field<float, CLONE> *temp_scalar_field;
