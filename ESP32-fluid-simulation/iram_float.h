@@ -10,13 +10,20 @@
 #include <cstdint>
 
 #define BIT_REPR(x) (*reinterpret_cast<volatile uint32_t*>(&(x)))
-#define BIT_INTERPR(x) (*reinterpret_cast<volatile float*>(&(x)))
-#define BIT_REPR_CONST(x) (*reinterpret_cast<const volatile uint32_t*>(&(x)))
-#define BIT_INTERPR_CONST(x) (*reinterpret_cast<const volatile float*>(&(x)))
+#define BIT_INTERPR(x) (*reinterpret_cast<float*>(&(x)))
 
 class iram_float_t{
     public:
         iram_float_t(float value = 0) : _value(BIT_REPR(value)) {}
+
+        #ifdef ESP32
+        void* operator new[] (size_t size){ // Forces allocation from IRAM
+            return heap_caps_malloc(size, MALLOC_CAP_32BIT);
+        }
+        void operator delete[] (void* p){
+            heap_caps_free(p);
+        }
+        #endif
 
         iram_float_t& operator=(const iram_float_t &rhs){
             _value = rhs._value;
@@ -25,34 +32,28 @@ class iram_float_t{
 
         iram_float_t operator-() const{
             uint32_t a_raw = _value;
-            float a = BIT_INTERPR(a_raw);
-            return -a;
+            return -BIT_INTERPR(a_raw);
         }
         iram_float_t operator+(const iram_float_t &rhs) const{
             uint32_t a_raw = _value, b_raw = rhs._value;
-            float a = BIT_INTERPR(a_raw), b = BIT_INTERPR(b_raw);
-            return a+b;
+            return BIT_INTERPR(a_raw)+BIT_INTERPR(b_raw);
         }
         iram_float_t operator-(const iram_float_t &rhs) const{
             uint32_t a_raw = _value, b_raw = rhs._value;
-            float a = BIT_INTERPR(a_raw), b = BIT_INTERPR(b_raw);
-            return a-b;
+            return BIT_INTERPR(a_raw)-BIT_INTERPR(b_raw);
         }
         iram_float_t operator*(const iram_float_t &rhs) const{
             uint32_t a_raw = _value, b_raw = rhs._value;
-            float a = BIT_INTERPR(a_raw), b = BIT_INTERPR(b_raw);
-            return a*b;
+            return BIT_INTERPR(a_raw)*BIT_INTERPR(b_raw);
         }
         iram_float_t operator/(const iram_float_t &rhs) const{
             uint32_t a_raw = _value, b_raw = rhs._value;
-            float a = BIT_INTERPR(a_raw), b = BIT_INTERPR(b_raw);
-            return a/b;
+            return BIT_INTERPR(a_raw)/BIT_INTERPR(b_raw);
         }
         
-
         float as_float() const{
-            float value = BIT_INTERPR_CONST(_value);
-            return value;
+            uint32_t a_raw = _value;
+            return BIT_INTERPR(a_raw);
         }
     private:
         volatile uint32_t _value;

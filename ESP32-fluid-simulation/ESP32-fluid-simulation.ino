@@ -37,14 +37,6 @@ Adafruit_Protomatter matrix(
 Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
 Field<float, CLONE> *temp_scalar_field;
 #ifdef STORE_COLOR_IN_IRAM
-template<>
-Field<iram_float_t, CLONE>::Field(int N_i, int N_j){
-    this->N_i = N_i;
-    this->N_j = N_j;
-    this->_nontrivial_elems = N_i*N_j;
-    this->_total_elems = (N_i+2)*(N_j+2);
-    this->_arr = (iram_float_t*)heap_caps_malloc(sizeof(iram_float_t)*this->_total_elems, MALLOC_CAP_32BIT);
-}
 Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
 #else
 Field<float, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
