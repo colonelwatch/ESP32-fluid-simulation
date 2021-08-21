@@ -2,10 +2,6 @@
 //  seems to improve performance significantly. To use it, copy it into:
 //  C:\Users\%USERPROFILE%\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.4
 
-// Aggressive memory optimizations options. Will impact performance significantly.
-#define AGGRESSIVE_DEALLOCATION // Temporarily deallocate vector field during memory-intensive jacobi iteration
-#define STORE_COLOR_IN_IRAM // Stores color fields in IRAM instead of DRAM, performance is about halved
-
 #include <Adafruit_Protomatter.h>
 
 #include "iram_float.h"
@@ -36,11 +32,7 @@ Adafruit_Protomatter matrix(
 
 Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
 Field<float, CLONE> *temp_scalar_field;
-#ifdef STORE_COLOR_IN_IRAM
 Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
-#else
-Field<float, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
-#endif
 
 unsigned long t_start, t_end;
 int refreshes = 0;
@@ -74,29 +66,16 @@ const unsigned char gamma8[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
-#ifdef STORE_COLOR_IN_IRAM
 void draw_color_field(
   const Field<iram_float_t, CLONE> *red_field, 
   const Field<iram_float_t, CLONE> *green_field, 
   const Field<iram_float_t, CLONE> *blue_field)
-#else
-void draw_color_field(
-  const Field<float, CLONE> *red_field,
-  const Field<float, CLONE> *green_field,
-  const Field<float, CLONE> *blue_field)
-#endif
 {
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      #ifdef STORE_COLOR_IN_IRAM
       int r = red_field->index(i, j).as_float()*255,
           g = green_field->index(i, j).as_float()*255,
           b = blue_field->index(i, j).as_float()*255; // Conversion out of iram_float_t is strictly called
-      #else
-      int r = red_field->index(i, j)*255,
-          g = green_field->index(i, j)*255,
-          b = blue_field->index(i, j)*255;
-      #endif
       r = gamma8[r];
       g = gamma8[g];
       b = gamma8[b];
@@ -122,17 +101,10 @@ void setup(void) {
   temp_scalar_field = new Field<float, CLONE>(N_ROWS, N_COLS);
   Serial.print("Pressure fields allocated! Remaining heap: ");
   Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
-  #ifdef STORE_COLOR_IN_IRAM
   red_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   green_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   blue_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
-  #else
-  red_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  green_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  blue_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  temp_color_field = temp_scalar_field; // temp_scalar_field can be reused here
-  #endif
   Serial.print("Color fields allocated! Remaining heap: ");
   Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   
@@ -175,13 +147,9 @@ void loop(void) {
   }
 
   // Zero out the divergence of the new velocity field
-  #ifdef AGGRESSIVE_DEALLOCATION
-  delete temp_vector_field;
+  delete temp_vector_field; // temporarily deallocate temp_vector_field because jacobi_pressure() needs extra memory
   jacobi_pressure(temp_scalar_field, velocity_field);
   temp_vector_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
-  #else
-  jacobi_pressure(temp_scalar_field, velocity_field);
-  #endif
   gradient(temp_vector_field, temp_scalar_field);
   *velocity_field -= *temp_vector_field;
 
