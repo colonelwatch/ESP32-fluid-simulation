@@ -26,17 +26,17 @@ class Field{
         Field& operator*=(const float &rhs);
         Field& operator/=(const float &rhs);
 
-        std::string toString(int precision = -1, bool nontrivial_only = true) const;
+        std::string toString(int precision = -1, bool inside_only = true) const;
     private:
         T *_arr;
-        int _nontrivial_elems, _total_elems;
+        int _inside_elems, _total_elems;
 };
 
 template<class T, BoundaryCondition bc>
 Field<T, bc>::Field(int N_i, int N_j){
     this->N_i = N_i;
     this->N_j = N_j;
-    this->_nontrivial_elems = N_i*N_j;
+    this->_inside_elems = N_i*N_j;
     this->_total_elems = (N_i+2)*(N_j+2);
     this->_arr = new T[_total_elems];
 }
@@ -48,12 +48,12 @@ Field<T, bc>::~Field(){
 
 template<class T, BoundaryCondition bc>
 T& Field<T, bc>::index(int i, int j){
-    return this->_arr[1+(i+1)*(N_j+2)+j];
+    return this->_arr[1+(i+1)*(this->N_j+2)+j];
 }
 
 template<class T, BoundaryCondition bc>
 T Field<T, bc>::index(int i, int j) const{
-    return this->_arr[1+(i+1)*(N_j+2)+j];
+    return this->_arr[1+(i+1)*(this->N_j+2)+j];
 }
 
 template<class T, BoundaryCondition bc>
@@ -79,17 +79,17 @@ void Field<T, bc>::update_boundary(){
 
 template<class T, BoundaryCondition bc>
 Field<T, bc>& Field<T, bc>::operator=(const T *rhs){
-    for(int i = 0; i < N_i; i++)
-        for(int j = 0; j < N_j; j++)
-            this->index(i, j) = rhs[i*N_j+j];
+    for(int i = 0; i < this->N_i; i++)
+        for(int j = 0; j < this->N_j; j++)
+            this->index(i, j) = rhs[i*this->N_j+j];
     this->update_boundary();
     return *this;
 }
 
 template<class T, BoundaryCondition bc>
 Field<T, bc>& Field<T, bc>::operator=(const Field &rhs){
-    for(int i = 0; i < N_i; i++)
-        for(int j = 0; j < N_j; j++)
+    for(int i = 0; i < this->N_i; i++)
+        for(int j = 0; j < this->N_j; j++)
             this->index(i, j) = rhs.index(i, j);
     this->update_boundary();
     return *this;
@@ -97,8 +97,8 @@ Field<T, bc>& Field<T, bc>::operator=(const Field &rhs){
 
 template<class T, BoundaryCondition bc>
 Field<T, bc>& Field<T, bc>::operator+=(const Field &rhs){
-    for(int i = 0; i < N_i; i++)
-        for(int j = 0; j < N_j; j++)
+    for(int i = 0; i < this->N_i; i++)
+        for(int j = 0; j < this->N_j; j++)
             this->index(i, j) += rhs.index(i, j);
     this->update_boundary();
     return *this;
@@ -106,8 +106,8 @@ Field<T, bc>& Field<T, bc>::operator+=(const Field &rhs){
 
 template<class T, BoundaryCondition bc>
 Field<T, bc>& Field<T, bc>::operator-=(const Field &rhs){
-    for(int i = 0; i < N_i; i++)
-        for(int j = 0; j < N_j; j++)
+    for(int i = 0; i < this->N_i; i++)
+        for(int j = 0; j < this->N_j; j++)
             this->index(i, j) -= rhs.index(i, j);
     this->update_boundary();
     return *this;
@@ -115,8 +115,8 @@ Field<T, bc>& Field<T, bc>::operator-=(const Field &rhs){
 
 template<class T, BoundaryCondition bc>
 Field<T, bc>& Field<T, bc>::operator*=(const float &rhs){
-    for(int i = 0; i < N_i; i++)
-        for(int j = 0; j < N_j; j++)
+    for(int i = 0; i < this->N_i; i++)
+        for(int j = 0; j < this->N_j; j++)
             this->index(i, j) *= rhs;
     this->update_boundary();
     return *this;
@@ -124,20 +124,20 @@ Field<T, bc>& Field<T, bc>::operator*=(const float &rhs){
 
 template<class T, BoundaryCondition bc>
 Field<T, bc>& Field<T, bc>::operator/=(const float &rhs){
-    for(int i = 0; i < N_i; i++)
-        for(int j = 0; j < N_j; j++)
+    for(int i = 0; i < this->N_i; i++)
+        for(int j = 0; j < this->N_j; j++)
             this->index(i, j) /= rhs;
     this->update_boundary();
     return *this;
 }
 
 template<class T, BoundaryCondition bc>
-std::string Field<T, bc>::toString(int precision, bool nontrivial_only) const{
+std::string Field<T, bc>::toString(int precision, bool inside_only) const{
     std::stringstream ss;
     if(precision != -1){
         ss << std::fixed << std::setprecision(precision);
     }
-    if(nontrivial_only){
+    if(inside_only){
         for(int i = 0; i < N_i; i++){
             for(int j = 0; j < N_j; j++){
                 ss << this->index(i, j);
