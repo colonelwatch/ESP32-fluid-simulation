@@ -4,10 +4,11 @@
 
 // Aggressive memory optimizations options. Will impact performance significantly.
 #define AGGRESSIVE_DEALLOCATION // Temporarily deallocate vector field during memory-intensive jacobi iteration
+#define STORE_COLOR_IN_IRAM // Stores color fields in IRAM instead of DRAM, performance is about halved
 
 #include <Adafruit_Protomatter.h>
 
-#include "q15.h"
+#include "iram_float.h"
 #include "Vector.h"
 #include "Field.h"
 #include "operations.h"
@@ -33,18 +34,21 @@ Adafruit_Protomatter matrix(
   true        // No double-buffering here (see "doublebuffer" example)
 );
 
+Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
+Field<float, CLONE> *temp_scalar_field;
+#ifdef STORE_COLOR_IN_IRAM
 template<>
-Field<q15_t, CLONE>::Field(int N_i, int N_j){
+Field<iram_float_t, CLONE>::Field(int N_i, int N_j){
     this->N_i = N_i;
     this->N_j = N_j;
     this->_nontrivial_elems = N_i*N_j;
     this->_total_elems = (N_i+2)*(N_j+2);
-    this->_arr = (q15_t*)heap_caps_malloc(sizeof(q15_t)*this->_total_elems, MALLOC_CAP_32BIT);
+    this->_arr = (iram_float_t*)heap_caps_malloc(sizeof(iram_float_t)*this->_total_elems, MALLOC_CAP_32BIT);
 }
-
-Field<q15_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
-Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
-Field<float, CLONE> *temp_scalar_field;
+Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
+#else
+Field<float, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
+#endif
 
 unsigned long t_start, t_end;
 int refreshes = 0;
@@ -78,14 +82,31 @@ const unsigned char gamma8[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
-void draw_color_field(const Field<q15_t, CLONE> *red_field, const Field<q15_t, CLONE> *green_field, const Field<q15_t, CLONE> *blue_field){
+#ifdef STORE_COLOR_IN_IRAM
+void draw_color_field(
+  const Field<iram_float_t, CLONE> *red_field, 
+  const Field<iram_float_t, CLONE> *green_field, 
+  const Field<iram_float_t, CLONE> *blue_field)
+#else
+void draw_color_field(
+  const Field<float, CLONE> *red_field,
+  const Field<float, CLONE> *green_field,
+  const Field<float, CLONE> *blue_field)
+#endif
+{
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      int r = red_field->index(i, j).as_int() >> 7;
+      #ifdef STORE_COLOR_IN_IRAM
+      int r = red_field->index(i, j).as_float()*255,
+          g = green_field->index(i, j).as_float()*255,
+          b = blue_field->index(i, j).as_float()*255; // Conversion out of iram_float_t is strictly called
+      #else
+      int r = red_field->index(i, j)*255,
+          g = green_field->index(i, j)*255,
+          b = blue_field->index(i, j)*255;
+      #endif
       r = gamma8[r];
-      int g = green_field->index(i, j).as_int() >> 7;
       g = gamma8[g];
-      int b = blue_field->index(i, j).as_int() >> 7;
       b = gamma8[b];
       matrix.drawPixel(j, i, matrix.color565(r, g, b));
     }
@@ -100,29 +121,41 @@ void setup(void) {
   delay(1000);
   
   Serial.println("Allocating fields...");
-  Serial.print("Remaining contiguous heap: ");
-  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
-  red_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
-  green_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
-  blue_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
-  temp_color_field = new Field<q15_t, CLONE>(N_ROWS, N_COLS);
-  Serial.print("Color fields allocated! Remaining contiguous heap: ");
+  Serial.print("Remaining heap: ");
   Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   velocity_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
   temp_vector_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
-  Serial.print("Vector fields allocated! Remaining contiguous heap: ");
+  Serial.print("Vector fields allocated! Remaining heap: ");
   Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   temp_scalar_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  Serial.print("Pressure fields allocated! Remaining contiguous heap: ");
+  Serial.print("Pressure fields allocated! Remaining heap: ");
+  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  #ifdef STORE_COLOR_IN_IRAM
+  red_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
+  green_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
+  blue_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
+  temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
+  #else
+  red_field = new Field<float, CLONE>(N_ROWS, N_COLS);
+  green_field = new Field<float, CLONE>(N_ROWS, N_COLS);
+  blue_field = new Field<float, CLONE>(N_ROWS, N_COLS);
+  temp_color_field = temp_scalar_field; // temp_scalar_field can be reused here
+  #endif
+  Serial.print("Color fields allocated! Remaining heap: ");
   Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   
   Serial.println("Setting color and velocity fields...");
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      red_field->index(i, j) = i <= center_i ? 0.0 : j > center_j ? 0.0 : 1.0;
-      green_field->index(i, j) = j <= center_j ? 0.0 : i <= center_i ? 1.0 : 0.0;
-      blue_field->index(i, j) = i <= center_i ? j <= center_j ? 1.0 : 0.0 : 0.0;
+      red_field->index(i, j) = 0;
+      green_field->index(i, j) = 0;
+      blue_field->index(i, j) = 0;
+
+      float angle = atan2(i-center_i, j-center_j);
+      if((angle >= -PI && angle < -PI/3)) red_field->index(i, j) = 1.0;
+      else if(angle >= -PI/3 && angle < PI/3) green_field->index(i, j) = 1.0;
+      else blue_field->index(i, j) = 1.0;
 
       velocity_field->index(i, j) = {0, 0};
     }
