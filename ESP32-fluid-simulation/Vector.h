@@ -9,93 +9,45 @@ class Vector{
         T x;
         T y;
         
-        Vector& operator=(const Vector &rhs);
-        Vector& operator+=(const Vector &rhs);
-        Vector& operator-=(const Vector &rhs);
-        Vector& operator*=(const float &rhs);
-        Vector& operator/=(const float &rhs);
+        Vector& operator=(const Vector &rhs){
+            this->x = rhs.x;
+            this->y = rhs.y;
+            return *this;
+        }
+        Vector& operator+=(const Vector &rhs){
+            this->x += rhs.x;
+            this->y += rhs.y;
+            return *this;
+        }
+        Vector& operator-=(const Vector &rhs){
+            this->x -= rhs.x;
+            this->y -= rhs.y;
+            return *this;
+        }
+        Vector& operator*=(const float &rhs){
+            this->x *= rhs;
+            this->y *= rhs;
+            return *this;
+        }
+        Vector& operator/=(const float &rhs){
+            this->x /= rhs;
+            this->y /= rhs;
+            return *this;
+        }
 
-        Vector operator-() const;
-        Vector operator+(const Vector &rhs) const;
-        Vector operator-(const Vector &rhs) const;
-        Vector operator*(const float &rhs) const;
-        Vector operator/(const float &rhs) const;
+        Vector operator-() const{ return {-this->x, -this->y}; }
+        Vector operator+(const Vector &rhs) const{ return {this->x+rhs.x, this->y+rhs.y}; }
+        Vector operator-(const Vector &rhs) const{ return {this->x-rhs.x, this->y-rhs.y}; }
+        Vector operator*(const float &rhs) const{ return {this->x*rhs, this->y*rhs}; }
+        Vector operator/(const float &rhs) const{ return {this->x/rhs, this->y/rhs}; }
 };
 
+// Scalar multiplication is commutative, so this fulfills that requirement
 template<typename T>
-Vector<T>& Vector<T>::operator=(const Vector &rhs){
-    this->x = rhs.x;
-    this->y = rhs.y;
-    return *this;
-}
+inline Vector<T> operator*(const float &lhs, const Vector<T> &rhs){ return rhs*lhs; }
 
 template<typename T>
-Vector<T>& Vector<T>::operator+=(const Vector &rhs){
-    this->x += rhs.x;
-    this->y += rhs.y;
-    return *this;
-}
-
-template<typename T>
-Vector<T>& Vector<T>::operator-=(const Vector &rhs){
-    this->x -= rhs.x;
-    this->y -= rhs.y;
-    return *this;
-}
-
-template<typename T>
-Vector<T>& Vector<T>::operator*=(const float &rhs){
-    this->x *= rhs;
-    this->y *= rhs;
-    return *this;
-}
-
-template<typename T>
-Vector<T>& Vector<T>::operator/=(const float &rhs){
-    this->x /= rhs;
-    this->y /= rhs;
-    return *this;
-}
-
-template<typename T>
-Vector<T> Vector<T>::operator-() const{
-    Vector lhs = {-this->x, -this->y};
-    return lhs;
-}
-
-template<typename T>
-Vector<T> Vector<T>::operator+(const Vector &rhs) const{
-    Vector lhs = {this->x+rhs.x, this->y+rhs.y};
-    return lhs;
-}
-
-template<typename T>
-Vector<T> Vector<T>::operator-(const Vector &rhs) const{
-    Vector lhs = {this->x-rhs.x, this->y-rhs.y};
-    return lhs;
-}
-
-template<typename T>
-Vector<T> Vector<T>::operator*(const float &rhs) const{
-    Vector lhs = {this->x*rhs, this->y*rhs};
-    return lhs;
-}
-
-// Flipped version of above for commutativity
-template<typename T>
-inline Vector<T> operator*(const float &lhs, const Vector<T> &rhs){
-    return rhs*lhs;
-}
-
-template<typename T>
-Vector<T> Vector<T>::operator/(const float &rhs) const{
-    Vector lhs = {this->x/rhs, this->y/rhs};
-    return lhs;
-}
-
-template<typename T>
-std::ostream& operator<<(std::ostream &os, const Vector<T> &rhs)
-{
+std::ostream& operator<<(std::ostream &os, const Vector<T> &rhs){
     os << '(' << rhs.x << ',' << rhs.y << ')';
     return os;
 }
