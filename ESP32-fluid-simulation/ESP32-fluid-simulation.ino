@@ -66,10 +66,9 @@ void draw_color_field(
 {
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      // Conversion out of iram_float_t must be explicitly called
-      int r = red_field->index(i, j).as_float()*255,
-          g = green_field->index(i, j).as_float()*255,
-          b = blue_field->index(i, j).as_float()*255;
+      int r = red_field->index(i, j)*255,
+          g = green_field->index(i, j)*255,
+          b = blue_field->index(i, j)*255;
       
       r = gamma8[r];
       g = gamma8[g];

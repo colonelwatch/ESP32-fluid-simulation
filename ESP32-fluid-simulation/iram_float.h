@@ -21,48 +21,14 @@ class iram_float_t{
         void* operator new[] (size_t size){ // Forces allocation from IRAM
             return heap_caps_malloc(size, MALLOC_CAP_32BIT);
         }
-        void operator delete[] (void* p){
-            heap_caps_free(p);
-        }
         #endif
 
-        iram_float_t& operator=(const iram_float_t &rhs){
-            _value = rhs._value;
-            return *this;
-        }
-
-        iram_float_t operator-() const{
-            uint32_t a_raw = _value;
-            return -BIT_INTERPR(a_raw);
-        }
-        iram_float_t operator+(const iram_float_t &rhs) const{
-            uint32_t a_raw = _value, b_raw = rhs._value;
-            return BIT_INTERPR(a_raw)+BIT_INTERPR(b_raw);
-        }
-        iram_float_t operator-(const iram_float_t &rhs) const{
-            uint32_t a_raw = _value, b_raw = rhs._value;
-            return BIT_INTERPR(a_raw)-BIT_INTERPR(b_raw);
-        }
-        iram_float_t operator*(const iram_float_t &rhs) const{
-            uint32_t a_raw = _value, b_raw = rhs._value;
-            return BIT_INTERPR(a_raw)*BIT_INTERPR(b_raw);
-        }
-        iram_float_t operator/(const iram_float_t &rhs) const{
-            uint32_t a_raw = _value, b_raw = rhs._value;
-            return BIT_INTERPR(a_raw)/BIT_INTERPR(b_raw);
-        }
-        
-        float as_float() const{
+        operator float() const {
             uint32_t a_raw = _value;
             return BIT_INTERPR(a_raw);
         }
     private:
         volatile uint32_t _value;
 };
-
-inline iram_float_t operator+(const float &lhs, const iram_float_t &rhs){ return rhs+lhs; }
-inline iram_float_t operator-(const float &lhs, const iram_float_t &rhs){ return rhs-lhs; }
-inline iram_float_t operator*(const float &lhs, const iram_float_t &rhs){ return rhs*lhs; }
-inline iram_float_t operator/(const float &lhs, const iram_float_t &rhs){ return rhs/lhs; }
 
 #endif
