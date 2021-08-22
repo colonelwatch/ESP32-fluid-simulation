@@ -2,6 +2,7 @@
 //  implemented with the volatile keyword to block optimizations. The result is forcing 
 //  the compiler to use the l32i/s32i instructions thus allowing iram_float_t objects to 
 //  be stored in IRAM, all while still using high level code
+// Original issue (and assembly solution): https://github.com/espressif/esp-idf/issues/3036
 // This will probably be spun off into a separate library in the future.
 
 #ifndef IRAM_FLOAT_H

@@ -54,7 +54,7 @@ frame_count = velocity_frames.shape[0]
 
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
 ax1.set_title('Pressure and Velocity')
-ax2.set_title('color')
+ax2.set_title('Color')
 ax3.set_title('Absolute Divergence (Bad!)')
 
 artists = []

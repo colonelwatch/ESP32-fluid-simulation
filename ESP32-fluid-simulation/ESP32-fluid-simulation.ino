@@ -13,24 +13,16 @@
 #define N_COLS 64
 #define DT 0.1
 
-typedef Vector<float> FloatVector;
-
+// Follows the pin layout specified by mrfaptastic/ESP32-HUB75-MatrixPanel-I2S-DMA
+//  but it is probably reconfigurable
 unsigned char rgbPins[]  = {25, 27, 26, 14, 13, 12};
 unsigned char addrPins[] = {23, 19, 5, 17, 32};
-unsigned char clockPin   = 16; // Must be on same port as rgbPins
+unsigned char clockPin   = 16;
 unsigned char latchPin   = 4;
 unsigned char oePin      = 15;
+Adafruit_Protomatter matrix(64, 6, 1, rgbPins, 5, addrPins, clockPin, latchPin, oePin, true);
 
-Adafruit_Protomatter matrix(
-  64,          // Width of matrix (or matrix chain) in pixels
-  6,           // Bit depth, 1-6
-  1, rgbPins,  // # of matrix chains, array of 6 RGB pins for each
-  5, addrPins, // # of address pins (height is inferred), array of pins
-  clockPin, latchPin, oePin, // Other matrix control pins
-  true        // No double-buffering here (see "doublebuffer" example)
-);
-
-Field<FloatVector, NEGATIVE> *velocity_field, *temp_vector_field;
+Field<Vector<float>, NEGATIVE> *velocity_field, *temp_vector_field;
 Field<float, CLONE> *temp_scalar_field;
 Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
 
@@ -40,13 +32,14 @@ bool benchmarked = false;
 
 TaskHandle_t Task1;
 void Task1code( void * pvParameters ){
-  ProtomatterStatus status = matrix.begin();
+  ProtomatterStatus status = matrix.begin(); // Now core 0 will handle the display for us
   if(status != PROTOMATTER_OK)
     Serial.println("Protomatter error: " + String(status));
   
   while(1) delay(1000);
 }
 
+// A gamma correction LUT from Adafruit
 // https://learn.adafruit.com/led-tricks-gamma-correction/the-quick-fix
 const unsigned char gamma8[] = {
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -73,9 +66,11 @@ void draw_color_field(
 {
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
+      // Conversion out of iram_float_t must be explicitly called
       int r = red_field->index(i, j).as_float()*255,
           g = green_field->index(i, j).as_float()*255,
-          b = blue_field->index(i, j).as_float()*255; // Conversion out of iram_float_t is strictly called
+          b = blue_field->index(i, j).as_float()*255;
+      
       r = gamma8[r];
       g = gamma8[g];
       b = gamma8[b];
@@ -92,21 +87,13 @@ void setup(void) {
   delay(1000);
   
   Serial.println("Allocating fields...");
-  Serial.print("Remaining heap: ");
-  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
-  velocity_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
-  temp_vector_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
-  Serial.print("Vector fields allocated! Remaining heap: ");
-  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  velocity_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
+  temp_vector_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
   temp_scalar_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  Serial.print("Pressure fields allocated! Remaining heap: ");
-  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   red_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   green_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   blue_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
-  Serial.print("Color fields allocated! Remaining heap: ");
-  Serial.println(heap_caps_get_free_size(MALLOC_CAP_8BIT));
   
   Serial.println("Setting color and velocity fields...");
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
@@ -137,8 +124,11 @@ void loop(void) {
   *velocity_field = *temp_vector_field;
 
   // Apply a force in the center of the screen if the BOOT button is pressed
+  // NOTE: This force pattern below causes divergences so large that jacobi_pressure() 
+  //  does not coverge quickly. For that reason, the fluid sim is only accurate when the 
+  //  button is NOT pressed, so don't hold the button for long when playing with this sim.
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
-  FloatVector dv = FloatVector({0, 10});
+  Vector<float> dv = Vector<float>({0, 10});
   if(digitalRead(0) == LOW){
     velocity_field->index(center_i, center_j) += dv;
     velocity_field->index(center_i+1, center_j) += dv;
@@ -149,7 +139,7 @@ void loop(void) {
   // Zero out the divergence of the new velocity field
   delete temp_vector_field; // temporarily deallocate temp_vector_field because jacobi_pressure() needs extra memory
   jacobi_pressure(temp_scalar_field, velocity_field);
-  temp_vector_field = new Field<FloatVector, NEGATIVE>(N_ROWS, N_COLS);
+  temp_vector_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
   gradient(temp_vector_field, temp_scalar_field);
   *velocity_field -= *temp_vector_field;
 
@@ -161,7 +151,7 @@ void loop(void) {
   advect(temp_color_field, blue_field, velocity_field, DT);
   *blue_field = *temp_color_field;
 
-  // Render the color field and display it
+  // Render the color fields and display it
   matrix.fillScreen(0);
   draw_color_field(red_field, green_field, blue_field);
   matrix.show();
