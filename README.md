@@ -9,7 +9,7 @@ This is a fluid simulation running on an ESP32, where pressing the BOOT button s
 1) It strategically uses `volatile` and `reinterpret_cast` to force floats to be represented as integers to the ESP32, thus allowing floats to be stored in the ESP32's IRAM. (see `iram_float.h` and https://github.com/espressif/esp-idf/issues/3036)
 2) It contains a portable and simple (though not state-of-the-art) C++ implementation of Jos Stam's fluid simulation method, running on a PC down to even an ESP32.
 
-That said, it only runs at 18fps (memory bound, accessing IRAM required extra instructions), and it isn't exactly what I wanted to make this summer either (free-surface fluid simulation with gravity, that turned out to be way more complicated than I thought), so I'll be moving on from this project to a necessarily more powerful Teensy 4.0 (or PC-powered) version later. If I make any updates to the core code then, I'll probably back-port it to this repo.
+That said, it only runs at 25fps (memory bound, accessing IRAM required extra instructions), and it isn't exactly what I wanted to make this summer either (free-surface fluid simulation with gravity, that turned out to be way more complicated than I thought), so I'll be moving on from this project to a necessarily more powerful Teensy 4.0 (or PC-powered) version later. If I make any updates to the core code then, I'll probably back-port it to this repo.
 
 ## Running
 
