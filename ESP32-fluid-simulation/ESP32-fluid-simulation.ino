@@ -16,7 +16,6 @@
 TFT_eSPI tft = TFT_eSPI();
 
 Field<Vector<float>, NEGATIVE> *velocity_field;
-Field<float, CLONE> *temp_scalar_field;
 Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field;
 
 unsigned long t_start, t_end;
@@ -52,7 +51,6 @@ void setup(void) {
   
   Serial.println("Allocating fields...");
   velocity_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
-  temp_scalar_field = new Field<float, CLONE>(N_ROWS, N_COLS);
   red_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   green_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   blue_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
@@ -107,8 +105,10 @@ void loop(void) {
   }
 
   // Zero out the divergence of the new velocity field
-  jacobi_pressure(temp_scalar_field, velocity_field);
-  gradient_and_subtract(velocity_field, temp_scalar_field);
+  Field<float, CLONE> *pressure_field = new Field<float, CLONE>(N_ROWS, N_COLS);
+  jacobi_pressure(pressure_field, velocity_field);
+  gradient_and_subtract(velocity_field, pressure_field);
+  delete pressure_field;
 
   // Replace the color field with the advected one, but do so by rotating the memory used
   Field<iram_float_t, CLONE> *temp, *temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
