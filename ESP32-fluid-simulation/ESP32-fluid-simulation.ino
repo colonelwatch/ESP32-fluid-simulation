@@ -44,11 +44,12 @@ void draw_color_field(
 
 
 void setup(void) {
+  // set up I/O things like Serial, TFT, and the input
   Serial.begin(115200);
-  Serial.println("Setting up TFT screen...");
+  Serial.println("Setting up TFT screen and input...");
   tft.init();
   tft.fillScreen(TFT_BLACK);
-  delay(1000);
+  pinMode(0, INPUT_PULLUP);
   
   
   Serial.println("Allocating fields...");
@@ -81,9 +82,7 @@ void setup(void) {
   velocity_field->update_boundary();
 
 
-  Serial.println();
   Serial.println("Initaliziation complete!");
-  pinMode(0, INPUT_PULLUP);
   t_start = millis();
 }
 
