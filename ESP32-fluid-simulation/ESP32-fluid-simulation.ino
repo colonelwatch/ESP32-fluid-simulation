@@ -109,8 +109,7 @@ void loop(void) {
   delete temp_vector_field; // temporarily deallocate temp_vector_field because jacobi_pressure() needs extra memory
   jacobi_pressure(temp_scalar_field, velocity_field);
   temp_vector_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
-  gradient(temp_vector_field, temp_scalar_field);
-  *velocity_field -= *temp_vector_field;
+  gradient_and_subtract(velocity_field, temp_scalar_field);
 
   // Advect the color field
   advect(temp_color_field, red_field, velocity_field, DT);

@@ -111,7 +111,7 @@ void jacobi_pressure(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_b
 }
 
 template<class SCALAR_T, BoundaryCondition in_bc, class VECTOR_T, BoundaryCondition out_bc>
-void gradient(Field<VECTOR_T, out_bc> *output, const Field<SCALAR_T, in_bc> *input){
+void gradient_and_subtract(Field<VECTOR_T, out_bc> *output, const Field<SCALAR_T, in_bc> *input){
     for(int i = 0; i < output->N_i; i++){
         for(int j = 0; j < output->N_j; j++){
             SCALAR_T up, down, left, right;
@@ -120,8 +120,8 @@ void gradient(Field<VECTOR_T, out_bc> *output, const Field<SCALAR_T, in_bc> *inp
             left = input->index(i, j-1);
             right = input->index(i, j+1);
 
-            output->index(i, j).x = (right-left)/2;
-            output->index(i, j).y = (up-down)/2;
+            output->index(i, j).x -= (right-left)/2;
+            output->index(i, j).y -= (up-down)/2;
         }
     }
     output->update_boundary();

@@ -68,8 +68,7 @@ int main(){
 
         // Zero out the divergence of the velocity field
         jacobi_pressure(&pressure_field, &velocity_field);
-        gradient(&temp_vector_field, &pressure_field);
-        velocity_field -= temp_vector_field;
+        gradient_and_subtract(&velocity_field, &pressure_field);
 
         // Advect the color field
         advect(&temp_scalar_field, &color_field, &velocity_field, DT);
