@@ -6,12 +6,13 @@
 
 enum BoundaryCondition {ZERO, CLONE, NEGATIVE}; // Maybe add zero and doesn't matter?
 
-template<class T, BoundaryCondition bc>
+template<class T>
 class Field{
     public:
         int N_i, N_j;
+        BoundaryCondition bc;
 
-        Field(int N_i, int N_j);
+        Field(int N_i, int N_j, BoundaryCondition bc);
         ~Field();
 
         // Boundary exists at i = -1, i = N_i, j = -1, j = N_j
@@ -28,35 +29,36 @@ class Field{
         int _inside_elems, _total_elems;
 };
 
-template<class T, BoundaryCondition bc>
-Field<T, bc>::Field(int N_i, int N_j){
+template<class T>
+Field<T>::Field(int N_i, int N_j, BoundaryCondition bc){
     this->N_i = N_i;
     this->N_j = N_j;
     this->_inside_elems = N_i*N_j;
     this->_total_elems = (N_i+2)*(N_j+2);
     this->_arr = new T[_total_elems];
+    this->bc = bc;
 }
 
-template<class T, BoundaryCondition bc>
-Field<T, bc>::~Field(){
+template<class T>
+Field<T>::~Field(){
     delete[] this->_arr;
 }
 
-template<class T, BoundaryCondition bc>
-T& Field<T, bc>::index(int i, int j){
+template<class T>
+T& Field<T>::index(int i, int j){
     return this->_arr[1+(i+1)*(this->N_j+2)+j];
 }
 
-template<class T, BoundaryCondition bc>
-T Field<T, bc>::index(int i, int j) const{
+template<class T>
+T Field<T>::index(int i, int j) const{
     return this->_arr[1+(i+1)*(this->N_j+2)+j];
 }
 
-template<class T, BoundaryCondition bc>
-void Field<T, bc>::update_boundary(){
+template<class T>
+void Field<T>::update_boundary(){
     float factor;
-    if(bc == ZERO) factor = 0;
-    else if(bc == CLONE) factor = 1;
+    if(this->bc == ZERO) factor = 0;
+    else if(this->bc == CLONE) factor = 1;
     else factor = -1; // this->bc == NEGATIVE
 
     this->index(-1, -1) = factor*this->index(0, 0);
@@ -73,8 +75,8 @@ void Field<T, bc>::update_boundary(){
     }
 }
 
-template<class T, BoundaryCondition bc>
-Field<T, bc>& Field<T, bc>::operator=(const T *rhs){
+template<class T>
+Field<T>& Field<T>::operator=(const T *rhs){
     for(int i = 0; i < this->N_i; i++)
         for(int j = 0; j < this->N_j; j++)
             this->index(i, j) = rhs[i*this->N_j+j];
@@ -82,8 +84,8 @@ Field<T, bc>& Field<T, bc>::operator=(const T *rhs){
     return *this;
 }
 
-template<class T, BoundaryCondition bc>
-Field<T, bc>& Field<T, bc>::operator=(const Field &rhs){
+template<class T>
+Field<T>& Field<T>::operator=(const Field &rhs){
     for(int i = 0; i < this->N_i; i++)
         for(int j = 0; j < this->N_j; j++)
             this->index(i, j) = rhs.index(i, j);
@@ -91,8 +93,8 @@ Field<T, bc>& Field<T, bc>::operator=(const Field &rhs){
     return *this;
 }
 
-template<class T, BoundaryCondition bc>
-std::string Field<T, bc>::toString(int precision, bool inside_only) const{
+template<class T>
+std::string Field<T>::toString(int precision, bool inside_only) const{
     std::stringstream ss;
     if(precision != -1){
         ss << std::fixed << std::setprecision(precision);

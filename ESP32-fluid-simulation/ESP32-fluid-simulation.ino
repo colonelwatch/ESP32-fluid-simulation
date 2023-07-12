@@ -15,8 +15,8 @@
 
 TFT_eSPI tft = TFT_eSPI();
 
-Field<Vector<float>, NEGATIVE> *velocity_field;
-Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field;
+Field<Vector<float>> *velocity_field;
+Field<iram_float_t> *red_field, *green_field, *blue_field;
 
 unsigned long t_start, t_end;
 int refreshes = 0;
@@ -24,9 +24,9 @@ bool benchmarked = false;
 
 
 void draw_color_field(
-  const Field<iram_float_t, CLONE> *red_field, 
-  const Field<iram_float_t, CLONE> *green_field, 
-  const Field<iram_float_t, CLONE> *blue_field)
+  const Field<iram_float_t> *red_field, 
+  const Field<iram_float_t> *green_field, 
+  const Field<iram_float_t> *blue_field)
 {
   tft.startWrite();
   tft.setCursor(0, 0);
@@ -53,10 +53,10 @@ void setup(void) {
   
   
   Serial.println("Allocating fields...");
-  velocity_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
-  red_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
-  green_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
-  blue_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
+  velocity_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
+  red_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
+  green_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
+  blue_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   
 
   Serial.println("Setting color and velocity fields...");
@@ -89,8 +89,8 @@ void setup(void) {
 
 void loop(void) {
   // Swap the velocity field with the advected one
-  Field<Vector<float>, NEGATIVE> *to_delete_vector = velocity_field,
-      *temp_vector_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
+  Field<Vector<float>> *to_delete_vector = velocity_field,
+      *temp_vector_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
   advect(temp_vector_field, velocity_field, velocity_field, DT);
   velocity_field = temp_vector_field;
   delete to_delete_vector;
@@ -111,8 +111,8 @@ void loop(void) {
 
 
   // Zero out the divergence of the new velocity field
-  Field<float, CLONE> *divergence_field = new Field<float, CLONE>(N_ROWS, N_COLS),
-      *pressure_field = new Field<float, CLONE>(N_ROWS, N_COLS);
+  Field<float> *divergence_field = new Field<float>(N_ROWS, N_COLS, CLONE),
+      *pressure_field = new Field<float>(N_ROWS, N_COLS, CLONE);
   divergence(divergence_field, velocity_field);
   gauss_seidel_pressure(pressure_field, divergence_field);
   gradient_and_subtract(velocity_field, pressure_field);
@@ -121,7 +121,7 @@ void loop(void) {
 
 
   // Replace the color field with the advected one, but do so by rotating the memory used
-  Field<iram_float_t, CLONE> *temp, *temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
+  Field<iram_float_t> *temp, *temp_color_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   
   advect(temp_color_field, red_field, velocity_field, DT);
   temp = red_field;

@@ -16,8 +16,8 @@ T billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22)
     return interpolated;
 }
 
-template<class T, BoundaryCondition property_bc, class VECTOR_T, BoundaryCondition vel_bc>
-void advect(Field<T, property_bc> *output, const Field<T, property_bc> *input, const Field<VECTOR_T, vel_bc> *velocity, float dt){
+template<class T, class VECTOR_T>
+void advect(Field<T> *output, const Field<T> *input, const Field<VECTOR_T> *velocity, float dt){
     for(int i = 0; i < output->N_i; i++){
         for(int j = 0; j < output->N_j; j++){
             // Get the source location
@@ -45,8 +45,8 @@ void advect(Field<T, property_bc> *output, const Field<T, property_bc> *input, c
     output->update_boundary();
 }
 
-template<class T, BoundaryCondition out_bc, BoundaryCondition in_bc>
-void laplacian(Field<T, out_bc> *output, const Field<T, in_bc> *input){
+template<class T>
+void laplacian(Field<T> *output, const Field<T> *input){
     for(int i = 0; i < output->N_i; i++){
         for(int j = 0; j < output->N_j; j++){
             T up, down, left, right, center;
@@ -62,8 +62,8 @@ void laplacian(Field<T, out_bc> *output, const Field<T, in_bc> *input){
     output->update_boundary();
 }
 
-template<class SCALAR_T, BoundaryCondition out_bc, class VECTOR_T, BoundaryCondition in_bc>
-void divergence(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_bc> *input){
+template<class SCALAR_T, class VECTOR_T>
+void divergence(Field<SCALAR_T> *output, const Field<VECTOR_T> *input){
     for(int i = 0; i < output->N_i; i++){
         for(int j = 0; j < output->N_j; j++){
             SCALAR_T upflow, downflow, leftflow, rightflow;
@@ -78,8 +78,8 @@ void divergence(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_bc> *i
     output->update_boundary();
 }
 
-template<class T, BoundaryCondition out_bc, BoundaryCondition in_bc>
-void gauss_seidel_pressure(Field<T, out_bc> *output, const Field<T, in_bc> *input, int iterations = 10){
+template<class T>
+void gauss_seidel_pressure(Field<T> *output, const Field<T> *input, int iterations = 10){
     int N_i = output->N_i, N_j = output->N_j;
 
     for(int i = 0; i < N_i; i++)
@@ -104,8 +104,8 @@ void gauss_seidel_pressure(Field<T, out_bc> *output, const Field<T, in_bc> *inpu
     }
 }
 
-template<class SCALAR_T, BoundaryCondition in_bc, class VECTOR_T, BoundaryCondition out_bc>
-void gradient_and_subtract(Field<VECTOR_T, out_bc> *output, const Field<SCALAR_T, in_bc> *input){
+template<class SCALAR_T, class VECTOR_T>
+void gradient_and_subtract(Field<VECTOR_T> *output, const Field<SCALAR_T> *input){
     for(int i = 0; i < output->N_i; i++){
         for(int j = 0; j < output->N_j; j++){
             SCALAR_T up, down, left, right;

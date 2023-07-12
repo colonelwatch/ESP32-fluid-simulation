@@ -27,18 +27,18 @@ int main(){
             else color_arr[i][j] = 0;
         }
     }
-    Field<float, CLONE> color_field(N_ROWS, N_COLS);
+    Field<float> color_field(N_ROWS, N_COLS, CLONE);
     color_field = (float*)color_arr;
 
     // Initialize the velocity field
     FloatVector zero_arr[N_ROWS][N_COLS] = {0};
-    Field<FloatVector, NEGATIVE> velocity_field(N_ROWS, N_COLS);
+    Field<FloatVector> velocity_field(N_ROWS, N_COLS, NEGATIVE);
     velocity_field = (FloatVector*)zero_arr;
 
     // Declare the other fields
-    Field<FloatVector, NEGATIVE> temp_vector_field(N_ROWS, N_COLS);
-    Field<float, CLONE> temp_scalar_field(N_ROWS, N_COLS);
-    Field<float, CLONE> pressure_field(N_ROWS, N_COLS);
+    Field<FloatVector> temp_vector_field(N_ROWS, N_COLS, NEGATIVE);
+    Field<float> temp_scalar_field(N_ROWS, N_COLS, CLONE);
+    Field<float> pressure_field(N_ROWS, N_COLS, CLONE);
 
     #ifndef NO_FILE_OUTPUT
     // Open files for output
