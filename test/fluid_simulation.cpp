@@ -67,7 +67,7 @@ int main(){
         }
 
         // Zero out the divergence of the velocity field
-        jacobi_pressure(&pressure_field, &velocity_field);
+        gauss_seidel_pressure(&pressure_field, &velocity_field);
         gradient_and_subtract(&velocity_field, &pressure_field);
 
         // Advect the color field

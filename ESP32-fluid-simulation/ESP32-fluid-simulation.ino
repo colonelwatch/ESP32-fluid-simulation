@@ -92,7 +92,7 @@ void loop(void) {
   delete to_delete_vector;
 
   // Apply a force in the center of the screen if the BOOT button is pressed
-  // NOTE: This force pattern below causes divergences so large that jacobi_pressure() 
+  // NOTE: This force pattern below causes divergences so large that gauss_seidel_pressure() 
   //  does not coverge quickly. For that reason, the fluid sim is only accurate when the 
   //  button is NOT pressed, so don't hold the button for long when playing with this sim.
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
@@ -106,7 +106,7 @@ void loop(void) {
 
   // Zero out the divergence of the new velocity field
   Field<float, CLONE> *pressure_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  jacobi_pressure(pressure_field, velocity_field);
+  gauss_seidel_pressure(pressure_field, velocity_field);
   gradient_and_subtract(velocity_field, pressure_field);
   delete pressure_field;
 
