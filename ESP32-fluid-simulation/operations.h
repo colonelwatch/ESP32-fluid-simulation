@@ -78,25 +78,20 @@ void divergence(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_bc> *i
     output->update_boundary();
 }
 
-template<class SCALAR_T, BoundaryCondition out_bc, class VECTOR_T, BoundaryCondition in_bc>
-void gauss_seidel_pressure(Field<SCALAR_T, out_bc> *output, const Field<VECTOR_T, in_bc> *input, int iterations = 10){
+template<class T, BoundaryCondition out_bc, BoundaryCondition in_bc>
+void gauss_seidel_pressure(Field<T, out_bc> *output, const Field<T, in_bc> *input, int iterations = 10){
     int N_i = output->N_i, N_j = output->N_j;
-
-    // the bc is not relevant in temporary fields because update_boundary is never called
-    // TODO: Implement a DONTCARE BoundaryCondition for temporary fields?
-    Field<SCALAR_T, CLONE> divergence_field(N_i, N_j);
 
     for(int i = 0; i < N_i; i++)
         for(int j = 0; j < N_j; j++)
             output->index(i, j) = 0;
     output->update_boundary();
-    divergence(&divergence_field, input);
 
     for(int k = 0; k < iterations; k++){
         for(int i = 0; i < N_i; i++){
             for(int j = 0; j < N_j; j++){
-                SCALAR_T divergence = divergence_field.index(i, j);
-                SCALAR_T up, down, left, right;
+                T divergence = input->index(i, j);
+                T up, down, left, right;
                 up = output->index(i-1, j);
                 down = output->index(i+1, j);
                 left = output->index(i, j-1);

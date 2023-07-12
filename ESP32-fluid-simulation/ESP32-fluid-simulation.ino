@@ -111,9 +111,12 @@ void loop(void) {
 
 
   // Zero out the divergence of the new velocity field
-  Field<float, CLONE> *pressure_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  gauss_seidel_pressure(pressure_field, velocity_field, 5);
+  Field<float, CLONE> *divergence_field = new Field<float, CLONE>(N_ROWS, N_COLS),
+      *pressure_field = new Field<float, CLONE>(N_ROWS, N_COLS);
+  divergence(divergence_field, velocity_field);
+  gauss_seidel_pressure(pressure_field, divergence_field);
   gradient_and_subtract(velocity_field, pressure_field);
+  delete divergence_field;
   delete pressure_field;
 
 
