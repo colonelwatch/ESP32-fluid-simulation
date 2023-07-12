@@ -15,9 +15,9 @@
 
 TFT_eSPI tft = TFT_eSPI();
 
-Field<Vector<float>, NEGATIVE> *velocity_field, *temp_vector_field;
+Field<Vector<float>, NEGATIVE> *velocity_field;
 Field<float, CLONE> *temp_scalar_field;
-Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field, *temp_color_field;
+Field<iram_float_t, CLONE> *red_field, *green_field, *blue_field;
 
 unsigned long t_start, t_end;
 int refreshes = 0;
@@ -52,12 +52,10 @@ void setup(void) {
   
   Serial.println("Allocating fields...");
   velocity_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
-  temp_vector_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
   temp_scalar_field = new Field<float, CLONE>(N_ROWS, N_COLS);
   red_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   green_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   blue_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
-  temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   
   Serial.println("Setting color and velocity fields...");
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
@@ -88,9 +86,12 @@ void setup(void) {
 }
 
 void loop(void) {
-  // Advect the velocity field
+  // Swap the velocity field with the advected one
+  Field<Vector<float>, NEGATIVE> *to_delete_vector = velocity_field,
+      *temp_vector_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
   advect(temp_vector_field, velocity_field, velocity_field, DT);
-  *velocity_field = *temp_vector_field;
+  velocity_field = temp_vector_field;
+  delete to_delete_vector;
 
   // Apply a force in the center of the screen if the BOOT button is pressed
   // NOTE: This force pattern below causes divergences so large that jacobi_pressure() 
@@ -106,18 +107,28 @@ void loop(void) {
   }
 
   // Zero out the divergence of the new velocity field
-  delete temp_vector_field; // temporarily deallocate temp_vector_field because jacobi_pressure() needs extra memory
   jacobi_pressure(temp_scalar_field, velocity_field);
-  temp_vector_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
   gradient_and_subtract(velocity_field, temp_scalar_field);
 
-  // Advect the color field
+  // Replace the color field with the advected one, but do so by rotating the memory used
+  Field<iram_float_t, CLONE> *temp, *temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
+  
   advect(temp_color_field, red_field, velocity_field, DT);
-  *red_field = *temp_color_field;
+  temp = red_field;
+  red_field = temp_color_field;
+  temp_color_field = temp;
+
   advect(temp_color_field, green_field, velocity_field, DT);
-  *green_field = *temp_color_field;
+  temp = green_field;
+  green_field = temp_color_field;
+  temp_color_field = temp;
+
   advect(temp_color_field, blue_field, velocity_field, DT);
-  *blue_field = *temp_color_field;
+  temp = blue_field;
+  blue_field = temp_color_field;
+  temp_color_field = temp;
+
+  delete temp_color_field; // drop the memory that go rotated out
 
   // Render the color fields and display it
   draw_color_field(red_field, green_field, blue_field);
