@@ -21,10 +21,6 @@ class Field{
         
         Field& operator=(const T *rhs);
         Field& operator=(const Field &rhs);
-        Field& operator+=(const Field &rhs);
-        Field& operator-=(const Field &rhs);
-        Field& operator*=(const float &rhs);
-        Field& operator/=(const float &rhs);
 
         std::string toString(int precision = -1, bool inside_only = true) const;
     private:
@@ -91,42 +87,6 @@ Field<T, bc>& Field<T, bc>::operator=(const Field &rhs){
     for(int i = 0; i < this->N_i; i++)
         for(int j = 0; j < this->N_j; j++)
             this->index(i, j) = rhs.index(i, j);
-    this->update_boundary();
-    return *this;
-}
-
-template<class T, BoundaryCondition bc>
-Field<T, bc>& Field<T, bc>::operator+=(const Field &rhs){
-    for(int i = 0; i < this->N_i; i++)
-        for(int j = 0; j < this->N_j; j++)
-            this->index(i, j) += rhs.index(i, j);
-    this->update_boundary();
-    return *this;
-}
-
-template<class T, BoundaryCondition bc>
-Field<T, bc>& Field<T, bc>::operator-=(const Field &rhs){
-    for(int i = 0; i < this->N_i; i++)
-        for(int j = 0; j < this->N_j; j++)
-            this->index(i, j) -= rhs.index(i, j);
-    this->update_boundary();
-    return *this;
-}
-
-template<class T, BoundaryCondition bc>
-Field<T, bc>& Field<T, bc>::operator*=(const float &rhs){
-    for(int i = 0; i < this->N_i; i++)
-        for(int j = 0; j < this->N_j; j++)
-            this->index(i, j) *= rhs;
-    this->update_boundary();
-    return *this;
-}
-
-template<class T, BoundaryCondition bc>
-Field<T, bc>& Field<T, bc>::operator/=(const float &rhs){
-    for(int i = 0; i < this->N_i; i++)
-        for(int j = 0; j < this->N_j; j++)
-            this->index(i, j) /= rhs;
     this->update_boundary();
     return *this;
 }
