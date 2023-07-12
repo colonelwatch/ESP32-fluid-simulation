@@ -18,9 +18,8 @@ TFT_eSPI tft = TFT_eSPI();
 Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
 
-unsigned long t_start, t_end;
-int refreshes = 0;
-bool benchmarked = false;
+unsigned long last_reported;
+int refresh_count = 0;
 
 
 void draw_color_field(
@@ -83,7 +82,7 @@ void setup(void) {
 
 
   Serial.println("Initaliziation complete!");
-  t_start = millis();
+  last_reported = millis();
 }
 
 
@@ -145,14 +144,18 @@ void loop(void) {
   draw_color_field(red_field, green_field, blue_field);
 
 
-  // After 5 seconds, print out the calculated refresh rate
-  refreshes++;
-  float t_stop = millis();
-  if(t_stop-t_start > 5000 && !benchmarked){
-    float refresh_rate = 1000*(float)refreshes/(t_stop-t_start);
-    Serial.println();
+  // Every 5 seconds, print out the calculated stats including the refresh rate
+  refresh_count++;
+  long now = millis();
+  if(now-last_reported > 5000){
+    float refresh_rate = 1000*(float)refresh_count/(now-last_reported);
+
     Serial.print("Refresh rate: ");
-    Serial.println(refresh_rate);
-    benchmarked = true;
+    Serial.print(refresh_rate);
+    Serial.print(", ");
+    Serial.println();
+
+    refresh_count = 0;
+    last_reported = now;
   }
 }
