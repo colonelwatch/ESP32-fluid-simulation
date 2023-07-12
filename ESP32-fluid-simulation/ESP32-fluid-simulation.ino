@@ -22,6 +22,7 @@ unsigned long t_start, t_end;
 int refreshes = 0;
 bool benchmarked = false;
 
+
 void draw_color_field(
   const Field<iram_float_t, CLONE> *red_field, 
   const Field<iram_float_t, CLONE> *green_field, 
@@ -41,13 +42,14 @@ void draw_color_field(
   tft.endWrite();
 }
 
+
 void setup(void) {
   Serial.begin(115200);
-  
   Serial.println("Setting up TFT screen...");
   tft.init();
   tft.fillScreen(TFT_BLACK);
   delay(1000);
+  
   
   Serial.println("Allocating fields...");
   velocity_field = new Field<Vector<float>, NEGATIVE>(N_ROWS, N_COLS);
@@ -55,6 +57,7 @@ void setup(void) {
   green_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   blue_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
   
+
   Serial.println("Setting color and velocity fields...");
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
@@ -77,11 +80,13 @@ void setup(void) {
   blue_field->update_boundary();
   velocity_field->update_boundary();
 
+
   Serial.println();
   Serial.println("Initaliziation complete!");
   pinMode(0, INPUT_PULLUP);
   t_start = millis();
 }
+
 
 void loop(void) {
   // Swap the velocity field with the advected one
@@ -90,6 +95,7 @@ void loop(void) {
   advect(temp_vector_field, velocity_field, velocity_field, DT);
   velocity_field = temp_vector_field;
   delete to_delete_vector;
+
 
   // Apply a force in the center of the screen if the BOOT button is pressed
   // NOTE: This force pattern below causes divergences so large that gauss_seidel_pressure() 
@@ -104,11 +110,13 @@ void loop(void) {
     velocity_field->index(center_i+1, center_j+1) += dv;
   }
 
+
   // Zero out the divergence of the new velocity field
   Field<float, CLONE> *pressure_field = new Field<float, CLONE>(N_ROWS, N_COLS);
-  gauss_seidel_pressure(pressure_field, velocity_field);
+  gauss_seidel_pressure(pressure_field, velocity_field, 5);
   gradient_and_subtract(velocity_field, pressure_field);
   delete pressure_field;
+
 
   // Replace the color field with the advected one, but do so by rotating the memory used
   Field<iram_float_t, CLONE> *temp, *temp_color_field = new Field<iram_float_t, CLONE>(N_ROWS, N_COLS);
@@ -130,8 +138,10 @@ void loop(void) {
 
   delete temp_color_field; // drop the memory that go rotated out
 
+
   // Render the color fields and display it
   draw_color_field(red_field, green_field, blue_field);
+
 
   // After 5 seconds, print out the calculated refresh rate
   refreshes++;
