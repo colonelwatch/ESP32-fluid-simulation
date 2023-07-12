@@ -4,7 +4,7 @@
 #include <sstream>
 #include <iomanip>
 
-enum BoundaryCondition {ZERO, CLONE, NEGATIVE}; // Maybe add zero and doesn't matter?
+enum BoundaryCondition {DONTCARE, CLONE, NEGATIVE};
 
 template<class T>
 class Field{
@@ -56,22 +56,40 @@ T Field<T>::index(int i, int j) const{
 
 template<class T>
 void Field<T>::update_boundary(){
-    float factor;
-    if(this->bc == ZERO) factor = 0;
-    else if(this->bc == CLONE) factor = 1;
-    else factor = -1; // this->bc == NEGATIVE
-
-    this->index(-1, -1) = factor*this->index(0, 0);
-    this->index(N_i, -1) = factor*this->index(N_i-1, 0);
-    this->index(-1, N_j) = factor*this->index(0, N_j-1);
-    this->index(N_i, N_j) = factor*this->index(N_i-1, N_j-1);
-    for(int i = 0; i < N_i; i++){
-        this->index(i, -1) = factor*this->index(i, 0);
-        this->index(i, N_j) = factor*this->index(i, N_j-1);
+    if(this->bc == DONTCARE) return;
+    else if(this->bc == CLONE){
+        // corners
+        this->index(-1, -1) = this->index(0, 0);
+        this->index(N_i, -1) = this->index(N_i-1, 0);
+        this->index(-1, N_j) = this->index(0, N_j-1);
+        this->index(N_i, N_j) = this->index(N_i-1, N_j-1);
+        
+        // top and bottom sides
+        for(int i = 0; i < N_i; i++){
+            this->index(i, -1) = this->index(i, 0);
+            this->index(i, N_j) = this->index(i, N_j-1);
+        }
+        for(int j = 0; j < N_j; j++){
+            this->index(-1, j) = this->index(0, j);
+            this->index(N_i, j) = this->index(N_i-1, j);
+        }
     }
-    for(int j = 0; j < N_j; j++){
-        this->index(-1, j) = factor*this->index(0, j);
-        this->index(N_i, j) = factor*this->index(N_i-1, j);
+    else{ // this->bc == NEGATIVE
+        // corners
+        this->index(-1, -1) = -this->index(0, 0);
+        this->index(N_i, -1) = -this->index(N_i-1, 0);
+        this->index(-1, N_j) = -this->index(0, N_j-1);
+        this->index(N_i, N_j) = -this->index(N_i-1, N_j-1);
+        
+        // top and bottom sides
+        for(int i = 0; i < N_i; i++){
+            this->index(i, -1) = -this->index(i, 0);
+            this->index(i, N_j) = -this->index(i, N_j-1);
+        }
+        for(int j = 0; j < N_j; j++){
+            this->index(-1, j) = -this->index(0, j);
+            this->index(N_i, j) = -this->index(N_i-1, j);
+        }
     }
 }
 
