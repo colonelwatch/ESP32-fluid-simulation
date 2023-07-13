@@ -25,10 +25,10 @@ void advect(Field<T> *output, const Field<T> *input, const Field<VECTOR_T> *velo
             VECTOR_T source = {j-displacement.x, i+displacement.y}; // tracing backwards where +i-direction == -y-direction and +j-direction == +x-direction
 
             // Clamp the source location within the boundaries
-            if(source.y < -0.5) source.y = -0.5;
-            if(source.y > output->N_i-0.5) source.y = output->N_i-0.5;
-            if(source.x < -0.5) source.x = -0.5;
-            if(source.x > output->N_j-0.5) source.x = output->N_j-0.5;
+            if(source.y < -0.5f) source.y = -0.5f;
+            if(source.y > output->N_i-0.5f) source.y = output->N_i-0.5f;
+            if(source.x < -0.5f) source.x = -0.5f;
+            if(source.x > output->N_j-0.5f) source.x = output->N_j-0.5f;
 
             // Get the source value with billinear interpolation
             int i11 = int(source.y), j11 = int(source.x), 
