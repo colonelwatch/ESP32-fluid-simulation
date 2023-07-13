@@ -6,10 +6,10 @@
 #include "operations.h"
 
 // assuming that screen aspect ratio matches domain aspect ratio
-#define N_ROWS 72
-#define N_COLS 48
-#define SCALING 5 // integer scaling -> screen size is inferred from this
-#define TILE_HEIGHT 60 // multiple of SCALING and a factor of (N_ROWS*SCALING) // TODO: only works for 60x60?
+#define N_ROWS 80
+#define N_COLS 60
+#define SCALING 4 // integer scaling -> screen size is inferred from this
+#define TILE_HEIGHT 80 // multiple of SCALING and a factor of (N_ROWS*SCALING)
 #define TILE_WIDTH 60 // multiple of SCALING and a factor of (N_COLS*SCALING)
 #define DT 0.1
 
@@ -260,8 +260,8 @@ void setup(void) {
   Serial.println("Launching tasks...");
   color_semaphore = xSemaphoreCreateBinary();
   color_mutex = xSemaphoreCreateMutex();
-  xTaskCreate(draw_routine, "draw", 10000, NULL, configMAX_PRIORITIES-1, NULL);
-  xTaskCreate(sim_routine, "sim", 10000, NULL, configMAX_PRIORITIES-2, NULL);
+  xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-1, NULL);
+  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-2, NULL);
 
   vTaskDelete(NULL);
 }
