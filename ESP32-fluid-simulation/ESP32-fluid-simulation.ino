@@ -1,7 +1,3 @@
-// Note: This NEEDS the attached platform.local.txt file. It forces O2 over Os, and it 
-//  seems to improve performance significantly. To use it, copy it into:
-//  C:\Users\%USERPROFILE%\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.4
-
 #include <TFT_eSPI.h>
 
 #include "iram_float.h"
