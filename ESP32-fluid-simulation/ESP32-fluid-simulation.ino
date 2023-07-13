@@ -11,9 +11,18 @@
 
 #define N_ROWS 64
 #define N_COLS 64
+#define TILE_HEIGHT 32
+#define TILE_WIDTH 32
 #define DT 0.1
 
+// we'll use the two tiles for double-buffering
 TFT_eSPI tft = TFT_eSPI();
+TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)};
+uint16_t *tile_buffers[2] = {
+    (uint16_t*)tiles[0].createSprite(TILE_WIDTH, TILE_HEIGHT), 
+    (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
+const int N_TILES = N_ROWS/TILE_HEIGHT + ((N_ROWS%TILE_HEIGHT != 0)? 1 : 0),
+    M_TILES = N_COLS/TILE_WIDTH + ((N_COLS%TILE_WIDTH != 0)? 1 : 0);
 
 Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
@@ -28,17 +37,32 @@ void draw_color_field(
   const Field<iram_float_t> *green_field, 
   const Field<iram_float_t> *blue_field)
 {
-  tft.startWrite();
-  tft.setCursor(0, 0);
-  for(int i = 0; i < N_ROWS; i++){
-    for(int j = 0; j < N_COLS; j++){
-      int r = red_field->index(i, j)*255,
-          g = green_field->index(i, j)*255,
-          b = blue_field->index(i, j)*255;
+  int buffer_select = 0;
+  tft.startWrite(); // start a single transfer for all the tiles
+
+  for(int ii = 0; ii < N_TILES; ii++){
+    for(int jj = 0; jj < M_TILES; jj++){
+      int offset_i = ii*TILE_HEIGHT, offset_j = jj*TILE_WIDTH;
+
+      for(int i = 0; i < TILE_HEIGHT; i++){
+        for(int j = 0; j < TILE_WIDTH; j++){
+          if(offset_i+i >= N_ROWS || offset_j+j >= N_COLS){
+            tiles[buffer_select].drawPixel(j, i, TFT_BLACK);
+            continue;
+          }
+          
+          int r = red_field->index(offset_i+i, offset_j+j)*255,
+              g = green_field->index(offset_i+i, offset_j+j)*255,
+              b = blue_field->index(offset_i+i, offset_j+j)*255;
+          tiles[buffer_select].drawPixel(j, i, tft.color565(r, g, b));
+        }
+      }
       
-      tft.drawPixel(j, i, tft.color565(r, g, b));
+      tft.pushImageDMA(offset_j, offset_i, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
+      buffer_select = buffer_select? 0 : 1;
     }
   }
+
   tft.endWrite();
 }
 
@@ -49,6 +73,7 @@ void setup(void) {
   Serial.println("Setting up TFT screen and input...");
   tft.init();
   tft.fillScreen(TFT_BLACK);
+  tft.initDMA();
   pinMode(0, INPUT_PULLUP);
   
   
