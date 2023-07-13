@@ -5,20 +5,23 @@
 #include "Field.h"
 #include "operations.h"
 
-#define N_ROWS 64
-#define N_COLS 64
-#define TILE_HEIGHT 32
-#define TILE_WIDTH 32
+// assuming that screen aspect ratio matches domain aspect ratio
+#define N_ROWS 72
+#define N_COLS 48
+#define SCALING 5 // integer scaling -> screen size is inferred from this
+#define TILE_HEIGHT 60 // multiple of SCALING and a factor of (N_ROWS*SCALING) // TODO: only works for 60x60?
+#define TILE_WIDTH 60 // multiple of SCALING and a factor of (N_COLS*SCALING)
 #define DT 0.1
 
-// we'll use the two tiles for double-buffering
 TFT_eSPI tft = TFT_eSPI();
+const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
+
+// we'll use the two tiles for double-buffering
 TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)};
 uint16_t *tile_buffers[2] = {
     (uint16_t*)tiles[0].createSprite(TILE_WIDTH, TILE_HEIGHT), 
     (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
-const int N_TILES = N_ROWS/TILE_HEIGHT + ((N_ROWS%TILE_HEIGHT != 0)? 1 : 0),
-    M_TILES = N_COLS/TILE_WIDTH + ((N_COLS%TILE_WIDTH != 0)? 1 : 0);
+const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
 
 Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
@@ -39,23 +42,23 @@ void draw_color_field(
 
   for(int ii = 0; ii < N_TILES; ii++){
     for(int jj = 0; jj < M_TILES; jj++){
-      int offset_i = ii*TILE_HEIGHT, offset_j = jj*TILE_WIDTH;
+      int i_start = ii*TILE_HEIGHT, j_start = jj*TILE_WIDTH,
+          i_end = (ii+1)*TILE_HEIGHT, j_end = (jj+1)*TILE_WIDTH;
+      int i_cell_start = i_start/SCALING, j_cell_start = j_start/SCALING,
+          i_cell_end = i_end/SCALING, j_cell_end = j_end/SCALING;
 
-      for(int i = 0; i < TILE_HEIGHT; i++){
-        for(int j = 0; j < TILE_WIDTH; j++){
-          if(offset_i+i >= N_ROWS || offset_j+j >= N_COLS){
-            tiles[buffer_select].drawPixel(j, i, TFT_BLACK);
-            continue;
-          }
+      for(int i_cell = i_cell_start; i_cell < i_cell_end; i_cell++){
+        for(int j_cell = j_cell_start; j_cell < j_cell_end; j_cell++){
+          int r = red_field->index(i_cell, j_cell)*255,
+              g = green_field->index(i_cell, j_cell)*255,
+              b = blue_field->index(i_cell, j_cell)*255;
           
-          int r = red_field->index(offset_i+i, offset_j+j)*255,
-              g = green_field->index(offset_i+i, offset_j+j)*255,
-              b = blue_field->index(offset_i+i, offset_j+j)*255;
-          tiles[buffer_select].drawPixel(j, i, tft.color565(r, g, b));
+          int i_local = i_cell*SCALING-i_start, j_local = j_cell*SCALING-j_start;
+          tiles[buffer_select].fillRect(j_local, i_local, SCALING, SCALING, tft.color565(r, g, b));
         }
       }
 
-      tft.pushImageDMA(offset_j, offset_i, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
+      tft.pushImageDMA(j_start, i_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
       buffer_select = buffer_select? 0 : 1;
     }
   }
