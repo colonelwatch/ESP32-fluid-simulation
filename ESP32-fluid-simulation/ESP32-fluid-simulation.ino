@@ -23,6 +23,8 @@ uint16_t *tile_buffers[2] = {
     (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
 const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
 
+SemaphoreHandle_t color_mutex, // mutex protects simultaneous read/write...
+    color_semaphore; // ... but semaphore predicates read on an unread write
 Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
 
@@ -66,6 +68,19 @@ void draw_color_field(
   tft.endWrite();
 }
 
+void draw_routine(void* args){
+  // Serial.println("Setting up TFT screen...");
+  tft.init();
+  tft.fillScreen(TFT_BLACK);
+  tft.initDMA();
+  while(1){
+    xSemaphoreTake(color_semaphore, portMAX_DELAY);
+    xSemaphoreTake(color_mutex, portMAX_DELAY);
+    draw_color_field(red_field, green_field, blue_field);
+    xSemaphoreGive(color_mutex);
+  }
+}
+
 
 void sim_routine(void* args){
   while(1){
@@ -106,6 +121,11 @@ void sim_routine(void* args){
     if(refresh_count == 0) point_timestamps[1] = millis();
 
 
+    // Wait for the color field to be released by the draw routine, and time this wait
+    xSemaphoreTake(color_mutex, portMAX_DELAY);
+    if(refresh_count == 0) point_timestamps[2] = millis();
+
+
     // Replace the color field with the advected one, but do so by rotating the memory used
     Field<iram_float_t> *temp, *temp_color_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
     
@@ -126,12 +146,12 @@ void sim_routine(void* args){
 
     delete temp_color_field; // drop the memory that go rotated out
 
-    if(refresh_count == 0) point_timestamps[2] = millis();
-
-
-    // Render the color fields and display it
-    draw_color_field(red_field, green_field, blue_field);
+    // Release the color field and allow the draw routine to use it
+    xSemaphoreGive(color_mutex);
+    xSemaphoreGive(color_semaphore);
+    
     if(refresh_count == 0) point_timestamps[3] = millis();
+
 
     // Assuming density is constant over the domain in the current time (which 
     //  is only a correct assumption if the divergence is equal to zero for all 
@@ -199,12 +219,7 @@ void sim_routine(void* args){
 
 
 void setup(void) {
-  // set up I/O things like Serial, TFT, and the input
   Serial.begin(115200);
-  Serial.println("Setting up TFT screen and input...");
-  tft.init();
-  tft.fillScreen(TFT_BLACK);
-  tft.initDMA();
   pinMode(0, INPUT_PULLUP);
   
   
@@ -243,10 +258,15 @@ void setup(void) {
 
 
   Serial.println("Launching tasks...");
-  xTaskCreate(sim_routine, "sim", 10000, NULL, configMAX_PRIORITIES-1, NULL);
+  color_semaphore = xSemaphoreCreateBinary();
+  color_mutex = xSemaphoreCreateMutex();
+  xTaskCreate(draw_routine, "draw", 10000, NULL, configMAX_PRIORITIES-1, NULL);
+  xTaskCreate(sim_routine, "sim", 10000, NULL, configMAX_PRIORITIES-2, NULL);
+
+  vTaskDelete(NULL);
 }
 
 
 void loop(void) {
-  vTaskDelete(NULL);
+  // Not actually used
 }
