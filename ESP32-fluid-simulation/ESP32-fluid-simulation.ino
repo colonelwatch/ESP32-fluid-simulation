@@ -216,22 +216,22 @@ void loop(void) {
       pct_taken[i] = 100*time_taken[i]/total_time;
 
     Serial.print("Refresh rate: ");
-    Serial.print(refresh_rate);
+    Serial.print(refresh_rate, 1);
     Serial.print(", ");
     Serial.print("Percent time taken: (");
     for(int i = 0; i < 5; i++){
-      Serial.print(pct_taken[i]);
+      Serial.print(pct_taken[i], 1);
       Serial.print("%");
       if(i < 4) Serial.print(", ");
     }
     Serial.print(")");
     Serial.print(", ");
     Serial.print("Current error: +/- ");
-    Serial.print(current_abs_pct_density);
+    Serial.print(current_abs_pct_density, 1);
     Serial.print("%");
     Serial.print(", ");
     Serial.print("Max error: +/- ");
-    Serial.print(max_abs_pct_density);
+    Serial.print(max_abs_pct_density, 1);
     Serial.print("%");
     Serial.print(", ");
     Serial.println();
