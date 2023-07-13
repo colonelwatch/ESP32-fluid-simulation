@@ -28,7 +28,8 @@ Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
 
 unsigned long last_reported;
-unsigned long point_timestamps[4];
+unsigned long point_timestamps[5];
+float max_abs_pct_density = 0;
 int refresh_count = 0;
 
 
@@ -57,7 +58,7 @@ void draw_color_field(
           tiles[buffer_select].drawPixel(j, i, tft.color565(r, g, b));
         }
       }
-      
+
       tft.pushImageDMA(offset_j, offset_i, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
       buffer_select = buffer_select? 0 : 1;
     }
@@ -177,6 +178,28 @@ void loop(void) {
   draw_color_field(red_field, green_field, blue_field);
   if(refresh_count == 0) point_timestamps[3] = millis();
 
+  // Assuming density is constant over the domain in the current time (which 
+  //  is only a correct assumption if the divergence is equal to zero for all 
+  //  time because the density is obviously constant over the domain at t=0), 
+  //  I'd think that the Euler equations say that the change in density over 
+  //  time is equal to the divergence of the velocity field times the density 
+  //  because the advection term is therefore zero.
+  // Furthermore, I'd argue that "expected density error in pct" is equal to 
+  //  the divergence times the time step. This is a thing we can track.
+  // TODO: research this and find a source?
+  float current_abs_divergence = 0, current_abs_pct_density; // "current" -> worst over domain at current time
+  Field<float> *new_divergence_field = new Field<float>(N_ROWS, N_COLS, DONTCARE); // "new" divergence after projection
+  divergence(new_divergence_field, velocity_field);
+  for(int i = 0; i < N_ROWS; i++)
+    for(int j = 0; j < N_COLS; j++)
+      if(abs(new_divergence_field->index(i, j)) > current_abs_divergence)
+        current_abs_divergence = abs(new_divergence_field->index(i, j));
+  current_abs_pct_density = 100*current_abs_divergence*DT;
+  if(current_abs_pct_density > max_abs_pct_density) max_abs_pct_density = current_abs_pct_density;
+  delete new_divergence_field;
+
+  if(refresh_count == 0) point_timestamps[4] = millis();
+
 
   // Every 5 seconds, print out the calculated stats including the refresh rate
   refresh_count++;
@@ -184,24 +207,32 @@ void loop(void) {
   if(now-last_reported > 5000){
     float refresh_rate = 1000*(float)refresh_count/(now-last_reported);
 
-    float time_taken[4], total_time, pct_taken[4];
+    float time_taken[5], total_time, pct_taken[5];
     time_taken[0] = (point_timestamps[0]-last_reported)/1000.0;
-    for(int i = 1; i < 4; i++)
+    for(int i = 1; i < 5; i++)
       time_taken[i] = (point_timestamps[i]-point_timestamps[i-1])/1000.0;
-    total_time = (point_timestamps[3]-last_reported)/1000.0;
-    for(int i = 0; i < 4; i++)
+    total_time = (point_timestamps[4]-last_reported)/1000.0;
+    for(int i = 0; i < 5; i++)
       pct_taken[i] = 100*time_taken[i]/total_time;
 
     Serial.print("Refresh rate: ");
     Serial.print(refresh_rate);
     Serial.print(", ");
     Serial.print("Percent time taken: (");
-    for(int i = 0; i < 4; i++){
+    for(int i = 0; i < 5; i++){
       Serial.print(pct_taken[i]);
       Serial.print("%");
-      if(i < 3) Serial.print(", ");
+      if(i < 4) Serial.print(", ");
     }
     Serial.print(")");
+    Serial.print(", ");
+    Serial.print("Current error: +/- ");
+    Serial.print(current_abs_pct_density);
+    Serial.print("%");
+    Serial.print(", ");
+    Serial.print("Max error: +/- ");
+    Serial.print(max_abs_pct_density);
+    Serial.print("%");
     Serial.print(", ");
     Serial.println();
 
