@@ -19,6 +19,7 @@ Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
 
 unsigned long last_reported;
+unsigned long point_timestamps[4];
 int refresh_count = 0;
 
 
@@ -94,6 +95,9 @@ void loop(void) {
   velocity_field = temp_vector_field;
   delete to_delete_vector;
 
+  if(refresh_count == 0) // if this is the first refresh since the last report, collect the timestamp
+    point_timestamps[0] = millis();
+
 
   // Apply a force in the center of the screen if the BOOT button is pressed
   // NOTE: This force pattern below causes divergences so large that gauss_seidel_pressure() 
@@ -118,6 +122,8 @@ void loop(void) {
   delete divergence_field;
   delete pressure_field;
 
+  if(refresh_count == 0) point_timestamps[1] = millis();
+
 
   // Replace the color field with the advected one, but do so by rotating the memory used
   Field<iram_float_t> *temp, *temp_color_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
@@ -139,9 +145,12 @@ void loop(void) {
 
   delete temp_color_field; // drop the memory that go rotated out
 
+  if(refresh_count == 0) point_timestamps[2] = millis();
+
 
   // Render the color fields and display it
   draw_color_field(red_field, green_field, blue_field);
+  if(refresh_count == 0) point_timestamps[3] = millis();
 
 
   // Every 5 seconds, print out the calculated stats including the refresh rate
@@ -150,8 +159,24 @@ void loop(void) {
   if(now-last_reported > 5000){
     float refresh_rate = 1000*(float)refresh_count/(now-last_reported);
 
+    float time_taken[4], total_time, pct_taken[4];
+    time_taken[0] = (point_timestamps[0]-last_reported)/1000.0;
+    for(int i = 1; i < 4; i++)
+      time_taken[i] = (point_timestamps[i]-point_timestamps[i-1])/1000.0;
+    total_time = (point_timestamps[3]-last_reported)/1000.0;
+    for(int i = 0; i < 4; i++)
+      pct_taken[i] = 100*time_taken[i]/total_time;
+
     Serial.print("Refresh rate: ");
     Serial.print(refresh_rate);
+    Serial.print(", ");
+    Serial.print("Percent time taken: (");
+    for(int i = 0; i < 4; i++){
+      Serial.print(pct_taken[i]);
+      Serial.print("%");
+      if(i < 3) Serial.print(", ");
+    }
+    Serial.print(")");
     Serial.print(", ");
     Serial.println();
 
