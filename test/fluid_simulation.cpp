@@ -53,7 +53,7 @@ int main(){
 
     for(int i = 0; i < total_timesteps; i++){
         // Advect the velocity field
-        advect(&temp_vector_field, &velocity_field, &velocity_field, DT);
+        semilagrangian_advect(&temp_vector_field, &velocity_field, &velocity_field, DT);
         velocity_field = temp_vector_field;
 
         // Apply a force in the center of the velocity field for a little time

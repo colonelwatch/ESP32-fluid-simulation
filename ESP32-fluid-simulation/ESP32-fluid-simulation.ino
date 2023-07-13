@@ -117,7 +117,7 @@ void loop(void) {
   // Swap the velocity field with the advected one
   Field<Vector<float>> *to_delete_vector = velocity_field,
       *temp_vector_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
-  advect(temp_vector_field, velocity_field, velocity_field, DT);
+  semilagrangian_advect(temp_vector_field, velocity_field, velocity_field, DT);
   velocity_field = temp_vector_field;
   delete to_delete_vector;
 
@@ -130,7 +130,7 @@ void loop(void) {
   //  does not coverge quickly. For that reason, the fluid sim is only accurate when the 
   //  button is NOT pressed, so don't hold the button for long when playing with this sim.
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
-  Vector<float> dv = Vector<float>({0, 10});
+  Vector<float> dv = Vector<float>({0, 10}); // since 10*DT = 1, this is the maximum speed without shooting past a cell
   if(digitalRead(0) == LOW){
     velocity_field->index(center_i, center_j) += dv;
     velocity_field->index(center_i+1, center_j) += dv;
@@ -154,17 +154,17 @@ void loop(void) {
   // Replace the color field with the advected one, but do so by rotating the memory used
   Field<iram_float_t> *temp, *temp_color_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   
-  advect(temp_color_field, red_field, velocity_field, DT);
+  semilagrangian_advect(temp_color_field, red_field, velocity_field, DT);
   temp = red_field;
   red_field = temp_color_field;
   temp_color_field = temp;
 
-  advect(temp_color_field, green_field, velocity_field, DT);
+  semilagrangian_advect(temp_color_field, green_field, velocity_field, DT);
   temp = green_field;
   green_field = temp_color_field;
   temp_color_field = temp;
 
-  advect(temp_color_field, blue_field, velocity_field, DT);
+  semilagrangian_advect(temp_color_field, blue_field, velocity_field, DT);
   temp = blue_field;
   blue_field = temp_color_field;
   temp_color_field = temp;

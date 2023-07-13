@@ -5,6 +5,7 @@
 #include "Field.h"
 
 // The below operations assume that the input and output have the same shape
+// SCALAR_T and VECTOR_T are self-evident template args, but T means here that either a scalar or vector can be used
 
 template<class T>
 T billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22)
@@ -17,18 +18,20 @@ T billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22)
 }
 
 template<class T, class VECTOR_T>
-void advect(Field<T> *output, const Field<T> *input, const Field<VECTOR_T> *velocity, float dt){
-    for(int i = 0; i < output->N_i; i++){
-        for(int j = 0; j < output->N_j; j++){
-            // Get the source location
+void semilagrangian_advect(Field<T> *new_property, const Field<T> *property, const Field<VECTOR_T> *velocity, float dt){
+    int N_i = new_property->N_i, N_j = new_property->N_j;
+    for(int i = 0; i < N_i; i++){
+        for(int j = 0; j < N_j; j++){
+            // Get the source location, where we trace backwards and where +i-direction == -y-direction and 
+            //  +j-direction == +x-direction
             VECTOR_T displacement = dt*velocity->index(i, j);
-            VECTOR_T source = {j-displacement.x, i+displacement.y}; // tracing backwards where +i-direction == -y-direction and +j-direction == +x-direction
+            VECTOR_T source = {j-displacement.x, i+displacement.y};
 
             // Clamp the source location within the boundaries
             if(source.y < -0.5f) source.y = -0.5f;
-            if(source.y > output->N_i-0.5f) source.y = output->N_i-0.5f;
+            if(source.y > N_i-0.5f) source.y = N_i-0.5f;
             if(source.x < -0.5f) source.x = -0.5f;
-            if(source.x > output->N_j-0.5f) source.x = output->N_j-0.5f;
+            if(source.x > N_j-0.5f) source.x = N_j-0.5f;
 
             // Get the source value with billinear interpolation
             int i11 = int(source.y), j11 = int(source.x), 
@@ -36,89 +39,100 @@ void advect(Field<T> *output, const Field<T> *input, const Field<VECTOR_T> *velo
                 i21 = i11+1, j21 = j11, 
                 i22 = i11+1, j22 = j11+1;
             float di = source.y-i11, dj = source.x-j11;
-            T p11 = input->index(i11, j11), p12 = input->index(i12, j12),
-                p21 = input->index(i21, j21), p22 = input->index(i22, j22);
+            T p11 = property->index(i11, j11), p12 = property->index(i12, j12),
+                p21 = property->index(i21, j21), p22 = property->index(i22, j22);
             T interpolated = billinear_interpolate(di, dj, p11, p12, p21, p22);
-            output->index(i, j) = interpolated;
+            new_property->index(i, j) = interpolated;
         }
     }
-    output->update_boundary();
+    new_property->update_boundary();
 }
 
 template<class T>
-void laplacian(Field<T> *output, const Field<T> *input){
-    for(int i = 0; i < output->N_i; i++){
-        for(int j = 0; j < output->N_j; j++){
+void laplacian(Field<T> *del_dot_del_property, const Field<T> *property){
+    int N_i = del_dot_del_property->N_i, N_j = del_dot_del_property->N_j;
+    
+    for(int i = 0; i < N_i; i++){
+        for(int j = 0; j < N_j; j++){
             T up, down, left, right, center;
-            center = input->index(i, j);
-            up = input->index(i-1, j);
-            down = input->index(i+1, j);
-            left = input->index(i, j-1);
-            right = input->index(i, j+1);
+            center = property->index(i, j);
+            up = property->index(i-1, j);
+            down = property->index(i+1, j);
+            left = property->index(i, j-1);
+            right = property->index(i, j+1);
 
-            output->index(i, j) = up+down+left+right-4*center;
+            del_dot_del_property->index(i, j) = up+down+left+right-4*center;
         }
     }
-    output->update_boundary();
+
+    del_dot_del_property->update_boundary();
 }
 
 template<class SCALAR_T, class VECTOR_T>
-void divergence(Field<SCALAR_T> *output, const Field<VECTOR_T> *input){
-    for(int i = 0; i < output->N_i; i++){
-        for(int j = 0; j < output->N_j; j++){
+void divergence(Field<SCALAR_T> *del_dot_velocity, const Field<VECTOR_T> *velocity){
+    int N_i = del_dot_velocity->N_i, N_j = del_dot_velocity->N_j;
+    
+    for(int i = 0; i < N_i; i++){
+        for(int j = 0; j < N_j; j++){
             SCALAR_T upflow, downflow, leftflow, rightflow;
-            downflow = -input->index(i+1, j).y;
-            upflow = input->index(i-1, j).y;
-            leftflow = -input->index(i, j-1).x;
-            rightflow = input->index(i, j+1).x;
+            downflow = -velocity->index(i+1, j).y; // we'll take positive as the inward direction
+            upflow = velocity->index(i-1, j).y;
+            leftflow = -velocity->index(i, j-1).x;
+            rightflow = velocity->index(i, j+1).x;
 
-            output->index(i, j) = (upflow+downflow+leftflow+rightflow)/2;
+            del_dot_velocity->index(i, j) = (upflow+downflow+leftflow+rightflow)/2;
         }
     }
-    output->update_boundary();
+
+    del_dot_velocity->update_boundary();
 }
 
-template<class T>
-void gauss_seidel_pressure(Field<T> *output, const Field<T> *input, int iterations = 10){
-    int N_i = output->N_i, N_j = output->N_j;
+template<class SCALAR_T>
+void gauss_seidel_pressure(Field<SCALAR_T> *pressure, const Field<SCALAR_T> *divergence, int iterations = 10){
+    int N_i = pressure->N_i, N_j = pressure->N_j;
 
     for(int i = 0; i < N_i; i++)
         for(int j = 0; j < N_j; j++)
-            output->index(i, j) = 0;
-    output->update_boundary();
+            pressure->index(i, j) = 0;
+    
+    pressure->update_boundary();
 
     for(int k = 0; k < iterations; k++){
         for(int i = 0; i < N_i; i++){
             for(int j = 0; j < N_j; j++){
-                T divergence = input->index(i, j);
-                T up, down, left, right;
-                up = output->index(i-1, j);
-                down = output->index(i+1, j);
-                left = output->index(i, j-1);
-                right = output->index(i, j+1);
+                SCALAR_T divergence_center = divergence->index(i, j);
+                SCALAR_T up, down, left, right;
+                up = pressure->index(i-1, j);
+                down = pressure->index(i+1, j);
+                left = pressure->index(i, j-1);
+                right = pressure->index(i, j+1);
 
-                output->index(i, j) = (up+down+left+right-divergence)/4;
+                pressure->index(i, j) = (up+down+left+right-divergence_center)/4;
             }
         }
-        output->update_boundary();
+
+        pressure->update_boundary();
     }
 }
 
 template<class SCALAR_T, class VECTOR_T>
-void gradient_and_subtract(Field<VECTOR_T> *output, const Field<SCALAR_T> *input){
-    for(int i = 0; i < output->N_i; i++){
-        for(int j = 0; j < output->N_j; j++){
+void gradient_and_subtract(Field<VECTOR_T> *velocity, const Field<SCALAR_T> *pressure){
+    int N_i = velocity->N_i, N_j = velocity->N_j;
+    
+    for(int i = 0; i < N_i; i++){
+        for(int j = 0; j < N_j; j++){
             SCALAR_T up, down, left, right;
-            up = input->index(i-1, j);
-            down = input->index(i+1, j);
-            left = input->index(i, j-1);
-            right = input->index(i, j+1);
+            up = pressure->index(i-1, j);
+            down = pressure->index(i+1, j);
+            left = pressure->index(i, j-1);
+            right = pressure->index(i, j+1);
 
-            output->index(i, j).x -= (right-left)/2;
-            output->index(i, j).y -= (up-down)/2;
+            velocity->index(i, j).x -= (right-left)/2;
+            velocity->index(i, j).y -= (up-down)/2;
         }
     }
-    output->update_boundary();
+
+    velocity->update_boundary();
 }
 
 #endif
