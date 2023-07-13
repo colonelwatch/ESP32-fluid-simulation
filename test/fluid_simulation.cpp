@@ -72,7 +72,7 @@ int main(){
         gradient_and_subtract(&velocity_field, &pressure_field);
 
         // Advect the color field
-        advect(&temp_scalar_field, &color_field, &velocity_field, DT);
+        semilagrangian_advect(&temp_scalar_field, &color_field, &velocity_field, DT);
         color_field = temp_scalar_field;
 
         #ifndef NO_FILE_OUTPUT
