@@ -2,7 +2,7 @@
 
 ![](images/headliner.jpg)
 
-This is a fluid simulation running on an ESP32, namely the one embedded into a development board that has been dubbed the "Cheap Yellow Display" (CYD) on Brian Lough's Discord channel (monorepo [here](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display)). In a few words, it squeezes out enough contiguous ranges memory from the ESP32 then applies Jos Stam's famous technique on a *very* small domain of 80x60. In more words:
+This is a fluid simulation running on an ESP32, namely the one embedded into a development board that has been dubbed the "Cheap Yellow Display" (CYD) on Brian Lough's Discord channel (monorepo [here](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display)). In a few words, it squeezes out enough contiguous ranges of memory from the ESP32 then applies Jos Stam's famous technique on a *very* small domain of 80x60. In more words:
 
 1. It strategically uses `volatile` and `reinterpret_cast` to force floats to be represented as integers to the ESP32, thus allowing floats to be stored in the ESP32's IRAM. (see `iram_float.h` and https://github.com/espressif/esp-idf/issues/3036)
 2. It contains a portable and simple (though not state-of-the-art) C++ implementation of Jos Stam's fluid simulation method, running on a PC down to even an ESP32.
@@ -23,7 +23,7 @@ python3 test/animate.py
 
 If you're interested in the CYD, the monorepo was critical for me to get started with it.
 
-If you're interested in this specific kind of fluid simulation you have an understanding of multi-variable calculus, here are some sources I would recommend:
+If you're interested in this specific kind of fluid simulation and you have an understanding of multi-variable calculus, here are some sources I would recommend:
 
 * A beginner-friendly intro: http://jamie-wong.com/2016/08/05/webgl-fluid-simulation/
 * An older, more comprehensive guide: https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu
