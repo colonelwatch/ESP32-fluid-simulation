@@ -15,6 +15,7 @@
 #define TILE_HEIGHT 80 // multiple of SCALING and a factor of (N_ROWS*SCALING)
 #define TILE_WIDTH 60 // multiple of SCALING and a factor of (N_COLS*SCALING)
 #define DT 0.1
+#define POLLING_PERIOD 20 // ms, for the touch screen
 
 TFT_eSPI tft = TFT_eSPI();
 const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
@@ -97,7 +98,6 @@ void touch_routine(void *args){
   ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   ts.begin(ts_spi);
 
-  TickType_t xLastWakeTime = xTaskGetTickCount();
   while(1){
     if(ts.touched()){
       // the output falls in a 4096x4096 domain and follows the i-j scheme...
@@ -108,12 +108,15 @@ void touch_routine(void *args){
       xQueueSend(touch_queue, &mapped_coords, 0); // TODO: don't just use send and pray
     }
 
-    vTaskDelayUntil(&xLastWakeTime, 100 / portTICK_PERIOD_MS);
+    vTaskDelay(POLLING_PERIOD / portTICK_PERIOD_MS);
   }
 }
 
 
 void sim_routine(void* args){
+  bool dragging = false; int n_fails = 0; // together form the state
+  Vector<uint16_t> last_coords, current_coords;
+  
   while(1){
     // Swap the velocity field with the advected one
     Field<Vector<float>> *to_delete_vector = velocity_field,
@@ -126,19 +129,34 @@ void sim_routine(void* args){
       point_timestamps[0] = millis();
 
 
-    // Apply a force wherever the user is touching
-    // NOTE: This force pattern below causes divergences so large that gauss_seidel_pressure() 
-    //  does not coverge quickly. For that reason, the fluid sim is only accurate when the 
-    //  button is NOT pressed, so don't hold the button for long when playing with this sim.
-    Vector<uint16_t> touch_point;
-    if(xQueueReceive(touch_queue, &touch_point, 0) == pdTRUE){
-      const int center_i = touch_point.x, center_j = touch_point.y;
-      Vector<float> dv = Vector<float>({0, 10});
-      velocity_field->index(center_i, center_j) += dv;
-      velocity_field->index(center_i+1, center_j) += dv;
-      velocity_field->index(center_i, center_j+1) += dv;
-      velocity_field->index(center_i+1, center_j+1) += dv;
+    bool touched = xQueuePeek(touch_queue, &current_coords, 0); // we define touched as "the queue is not empty"
+    if(!dragging){ // n_fails is a don't-care here
+      if(touched){
+        dragging = true;
+        last_coords = current_coords;
+        n_fails = 0;
+      }
+      // else do nothing
     }
+    else if(dragging && n_fails < 3){
+      if(touched){
+        while(xQueueReceive(touch_queue, &current_coords, 0) == pdTRUE){ // empty the queue
+          Vector<float> drag_velocity = { // TODO: I had to do another i-j to x-y conversion here, is that right?
+            .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
+            .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD
+          };
+          velocity_field->index(current_coords.x, current_coords.y) = drag_velocity; // boundary condition?
+          last_coords = current_coords;
+        }
+        n_fails = 0;
+      }
+      else{
+        n_fails++;
+        if(n_fails == 3)
+          dragging = false;
+      }
+    }
+    // dragging && n_fails >= 5 should never happen
 
 
     // Zero out the divergence of the new velocity field
