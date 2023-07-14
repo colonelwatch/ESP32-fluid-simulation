@@ -68,6 +68,11 @@ void draw_color_field(
               g = green_field->index(i_cell, j_cell)*255,
               b = blue_field->index(i_cell, j_cell)*255;
           
+          // don't go out of bounds
+          if(r < 0) r = 0; else if(r > 255) r = 255;
+          if(g < 0) g = 0; else if(g > 255) g = 255;
+          if(b < 0) b = 0; else if(b > 255) b = 255;
+          
           int i_local = i_cell*SCALING-i_start, j_local = j_cell*SCALING-j_start;
           tiles[buffer_select].fillRect(j_local, i_local, SCALING, SCALING, tft.color565(r, g, b));
         }
