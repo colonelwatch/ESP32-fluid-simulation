@@ -1,4 +1,7 @@
+#include <SPI.h>
+
 #include <TFT_eSPI.h>
+#include <XPT2046_Touchscreen.h>
 
 #include "iram_float.h"
 #include "Vector.h"
@@ -27,6 +30,15 @@ SemaphoreHandle_t color_mutex, // mutex protects simultaneous read/write...
     color_semaphore; // ... but semaphore predicates read on an unread write
 Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
+
+const int XPT2046_MOSI = 32;
+const int XPT2046_MISO = 39;
+const int XPT2046_CLK = 25;
+const int XPT2046_CS = 33;
+SPIClass ts_spi = SPIClass(HSPI);
+XPT2046_Touchscreen ts(XPT2046_CS); // TODO: use the IRQ pin?
+
+QueueHandle_t touch_queue;
 
 unsigned long last_reported;
 unsigned long point_timestamps[5];
@@ -81,6 +93,25 @@ void draw_routine(void* args){
   }
 }
 
+void touch_routine(void *args){
+  ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
+  ts.begin(ts_spi);
+
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  while(1){
+    if(ts.touched()){
+      // the output falls in a 4096x4096 domain and follows the i-j scheme...
+      // ... but we'll map to a N_ROWSxN_COLS domain and the x-y scheme
+      TS_Point raw_coords = ts.getPoint();
+      Vector<uint16_t> mapped_coords = {raw_coords.x * N_ROWS / 4096, 
+          (4096-raw_coords.y) * N_COLS / 4096}; 
+      xQueueSend(touch_queue, &mapped_coords, 0); // TODO: don't just use send and pray
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, 100 / portTICK_PERIOD_MS);
+  }
+}
+
 
 void sim_routine(void* args){
   while(1){
@@ -95,13 +126,14 @@ void sim_routine(void* args){
       point_timestamps[0] = millis();
 
 
-    // Apply a force in the center of the screen if the BOOT button is pressed
+    // Apply a force wherever the user is touching
     // NOTE: This force pattern below causes divergences so large that gauss_seidel_pressure() 
     //  does not coverge quickly. For that reason, the fluid sim is only accurate when the 
     //  button is NOT pressed, so don't hold the button for long when playing with this sim.
-    const int center_i = N_ROWS/2, center_j = N_COLS/2;
-    Vector<float> dv = Vector<float>({0, 10}); // since 10*DT = 1, this is the maximum speed without shooting past a cell
-    if(digitalRead(0) == LOW){
+    Vector<uint16_t> touch_point;
+    if(xQueueReceive(touch_queue, &touch_point, 0) == pdTRUE){
+      const int center_i = touch_point.x, center_j = touch_point.y;
+      Vector<float> dv = Vector<float>({0, 10});
       velocity_field->index(center_i, center_j) += dv;
       velocity_field->index(center_i+1, center_j) += dv;
       velocity_field->index(center_i, center_j+1) += dv;
@@ -258,10 +290,12 @@ void setup(void) {
 
 
   Serial.println("Launching tasks...");
+  touch_queue = xQueueCreate(10, sizeof(Vector<uint16_t>));
   color_semaphore = xSemaphoreCreateBinary();
   color_mutex = xSemaphoreCreateMutex();
   xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-1, NULL);
-  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-2, NULL);
+  xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-2, NULL);
+  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
 
   vTaskDelete(NULL);
 }
