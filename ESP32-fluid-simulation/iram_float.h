@@ -14,7 +14,7 @@ class iram_float_t{
             : _value(*reinterpret_cast<volatile uint32_t*>(&value)) {}
 
         #ifdef ESP32
-        void* operator new[] (size_t size){ // Forces allocation from IRAM
+        void* operator new[] (size_t size){ // Allows allocation from IRAM
             return heap_caps_malloc(size, MALLOC_CAP_32BIT);
         }
         #endif
