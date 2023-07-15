@@ -159,10 +159,11 @@ void sim_routine(void* args){
 
 
     // Zero out the divergence of the new velocity field
+    const float sor_omega = 1.90; // 1.0 reverts SOR to Gauss-Seidel, but 2/(1+sin(pi/60)) = 1.90 is optimal?
     Field<float> *divergence_field = new Field<float>(N_ROWS, N_COLS, DONTCARE),
         *pressure_field = new Field<float>(N_ROWS, N_COLS, CLONE);
     divergence(divergence_field, velocity_field);
-    gauss_seidel_pressure(pressure_field, divergence_field);
+    sor_pressure(pressure_field, divergence_field, 10, sor_omega);
     gradient_and_subtract(velocity_field, pressure_field);
     delete divergence_field;
     delete pressure_field;

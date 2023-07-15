@@ -67,8 +67,9 @@ int main(){
         }
 
         // Zero out the divergence of the velocity field
+        const float sor_omega = 1.90; // 1.0 reverts SOR to Gauss-Seidel, but 2/(1+sin(pi/60)) = 1.90 is optimal?
         divergence(&temp_scalar_field, &velocity_field);
-        gauss_seidel_pressure(&pressure_field, &temp_scalar_field);
+        sor_pressure(&pressure_field, &temp_scalar_field, 10, sor_omega);
         gradient_and_subtract(&velocity_field, &pressure_field);
 
         // Advect the color field

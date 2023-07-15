@@ -88,7 +88,7 @@ void divergence(Field<SCALAR_T> *del_dot_velocity, const Field<VECTOR_T> *veloci
 }
 
 template<class SCALAR_T>
-void gauss_seidel_pressure(Field<SCALAR_T> *pressure, const Field<SCALAR_T> *divergence, int iterations = 10){
+void sor_pressure(Field<SCALAR_T> *pressure, const Field<SCALAR_T> *divergence, int iterations, float omega){
     int N_i = pressure->N_i, N_j = pressure->N_j;
 
     for(int i = 0; i < N_i; i++)
@@ -107,7 +107,7 @@ void gauss_seidel_pressure(Field<SCALAR_T> *pressure, const Field<SCALAR_T> *div
                 left = pressure->index(i, j-1);
                 right = pressure->index(i, j+1);
 
-                pressure->index(i, j) = (up+down+left+right-divergence_center)/4;
+                pressure->index(i, j) = (1-omega)*pressure->index(i, j) + omega*(up+down+left+right-divergence_center)/4;
             }
         }
 
