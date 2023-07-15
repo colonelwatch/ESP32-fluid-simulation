@@ -14,7 +14,7 @@
 #define SCALING 4 // integer scaling -> screen size is inferred from this
 #define TILE_HEIGHT 80 // multiple of SCALING and a factor of (N_ROWS*SCALING)
 #define TILE_WIDTH 60 // multiple of SCALING and a factor of (N_COLS*SCALING)
-#define DT 0.1
+#define DT 1/12.0 // s, size of time step in sim time (should roughly match real FPS)
 #define POLLING_PERIOD 20 // ms, for the touch screen
 // #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
 
