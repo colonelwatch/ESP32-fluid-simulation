@@ -314,16 +314,24 @@ void stats_routine(void* args){
 void setup(void) {
   Serial.begin(115200);
   pinMode(0, INPUT_PULLUP);
-  
-  
-  Serial.println("Allocating fields...");
+
+
+  // TODO: dynamic allocation of the velocity field AFTER the color fields causes a crash?
+  Serial.println("Initializing velocity field...");
   velocity_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
+  for(int i = 0; i < N_ROWS; i++)
+    for(int j = 0; j < N_COLS; j++)
+      velocity_field->index(i, j) = {0, 0};
+  velocity_field->update_boundary();
+  
+  
+  // Init the raw fields using rules, then smooth them with the kernel for the final color fields
+  Serial.println("Initializaing color fields...");
+  float kernel[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
   red_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   green_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   blue_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
-  
 
-  Serial.println("Setting color and velocity fields...");
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
@@ -335,15 +343,40 @@ void setup(void) {
       if((angle >= -PI && angle < -PI/3)) red_field->index(i, j) = 1.0;
       else if(angle >= -PI/3 && angle < PI/3) green_field->index(i, j) = 1.0;
       else blue_field->index(i, j) = 1.0;
-
-      velocity_field->index(i, j) = {0, 0};
     }
   }
 
   red_field->update_boundary();
   green_field->update_boundary();
   blue_field->update_boundary();
-  velocity_field->update_boundary();
+
+  for(int i = 0; i < N_ROWS; i++){
+    for(int j = 0; j < N_COLS; j++){
+      float smoothed_red = 0, smoothed_green = 0, smoothed_blue = 0;
+
+      for(int di = 0; di < 3; di++){
+        for(int dj = 0; dj < 3; dj++){
+          int ii = i+di, jj = j+dj;
+
+          // extend the edge of the field by repeating the last row/column
+          if(ii > N_ROWS-1) ii = N_ROWS-1;
+          if(jj > N_COLS-1) jj = N_COLS-1;
+          
+          smoothed_red += kernel[di][dj]*red_field->index(ii, jj);
+          smoothed_green += kernel[di][dj]*green_field->index(ii, jj);
+          smoothed_blue += kernel[di][dj]*blue_field->index(ii, jj);
+        }
+      }
+
+      red_field->index(i, j) = smoothed_red;
+      green_field->index(i, j) = smoothed_green;
+      blue_field->index(i, j) = smoothed_blue;
+    }
+  }
+
+  red_field->update_boundary();
+  green_field->update_boundary();
+  blue_field->update_boundary();
 
 
   Serial.println("Initaliziation complete!");
