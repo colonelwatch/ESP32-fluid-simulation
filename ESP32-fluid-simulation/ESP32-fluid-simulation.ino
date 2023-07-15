@@ -20,12 +20,13 @@
 
 // touch resources
 QueueHandle_t touch_queue = xQueueCreate(10, sizeof(Vector<uint16_t>));
+const int XPT2046_IRQ = 36;
 const int XPT2046_MOSI = 32;
 const int XPT2046_MISO = 39;
 const int XPT2046_CLK = 25;
 const int XPT2046_CS = 33;
 SPIClass ts_spi = SPIClass(HSPI);
-XPT2046_Touchscreen ts(XPT2046_CS); // TODO: use the IRQ pin?
+XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
 
 // essential sim resources
 // TODO: allocation here causes a crash, AND runtime allocation of the 
@@ -61,7 +62,7 @@ void touch_routine(void *args){
   ts.begin(ts_spi);
 
   while(1){
-    if(ts.touched()){
+    if(ts.tirqTouched() && ts.touched()){
       // the output falls in a 4096x4096 domain and follows the i-j scheme...
       // ... but we'll map to a N_ROWSxN_COLS domain and the x-y scheme
       TS_Point raw_coords = ts.getPoint();
