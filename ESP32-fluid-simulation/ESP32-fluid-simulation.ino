@@ -19,7 +19,7 @@
 
 
 // touch resources
-QueueHandle_t touch_queue;
+QueueHandle_t touch_queue = xQueueCreate(10, sizeof(Vector<uint16_t>));
 const int XPT2046_MOSI = 32;
 const int XPT2046_MISO = 39;
 const int XPT2046_CLK = 25;
@@ -28,12 +28,14 @@ SPIClass ts_spi = SPIClass(HSPI);
 XPT2046_Touchscreen ts(XPT2046_CS); // TODO: use the IRQ pin?
 
 // essential sim resources
+// TODO: allocation here causes a crash, AND runtime allocation of the 
+//  velocity field AFTER the color fields causes a crash?
 Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
 
 // draw resources
-SemaphoreHandle_t color_mutex, // mutex protects simultaneous read/write...
-    color_semaphore; // ... but semaphore predicates read on an unread write
+SemaphoreHandle_t color_mutex = xSemaphoreCreateMutex(), // mutex protects simultaneous read/write...
+    color_semaphore = xSemaphoreCreateBinary(); // ... but semaphore predicates read on an unread write
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)}; // we'll use the two tiles for double-buffering
 uint16_t *tile_buffers[2] = {
@@ -43,7 +45,8 @@ const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
 const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
 
 // stats resources
-SemaphoreHandle_t stats_mutex, stats_semaphore;
+SemaphoreHandle_t stats_mutex = xSemaphoreCreateMutex(), 
+    stats_semaphore = xSemaphoreCreateBinary();
 struct stats{
   unsigned long point_timestamps[6];
   float current_abs_pct_density; // "current" -> worst over domain at current time
@@ -319,7 +322,6 @@ void setup(void) {
   pinMode(0, INPUT_PULLUP);
 
 
-  // TODO: dynamic allocation of the velocity field AFTER the color fields causes a crash?
   Serial.println("Initializing velocity field...");
   velocity_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
   for(int i = 0; i < N_ROWS; i++)
@@ -386,11 +388,6 @@ void setup(void) {
 
 
   Serial.println("Launching tasks...");
-  touch_queue = xQueueCreate(10, sizeof(Vector<uint16_t>));
-  color_semaphore = xSemaphoreCreateBinary();
-  color_mutex = xSemaphoreCreateMutex();
-  stats_semaphore = xSemaphoreCreateBinary();
-  stats_mutex = xSemaphoreCreateMutex();
   xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-1, NULL);
   xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-2, NULL);
   xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
