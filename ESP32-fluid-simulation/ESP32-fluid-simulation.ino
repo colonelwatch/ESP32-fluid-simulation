@@ -140,19 +140,28 @@ void sim_routine(void* args){
     if(!dragging){ // n_fails is a don't-care here
       if(touched){
         dragging = true;
-        last_coords = current_coords;
-        n_fails = 0;
-      }
-      // else do nothing
-    }
-    else if(dragging && n_fails < 3){
-      if(touched){
+        xQueueReceive(touch_queue, &last_coords, 0); // read the first coords as the beginning of the dragging
         while(xQueueReceive(touch_queue, &current_coords, 0) == pdTRUE){ // empty the queue
           Vector<float> drag_velocity = { // TODO: I had to do another i-j to x-y conversion here, is that right?
             .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
             .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD
           };
           velocity_field->index(current_coords.x, current_coords.y) = drag_velocity; // boundary condition?
+          last_coords = current_coords;
+        }
+        n_fails = 0;
+      }
+      // else do nothing
+    }
+    else if(dragging && n_fails < 3){
+      if(touched){
+        // since we're continuing the dragging from before, we don't need to read the first coords
+        while(xQueueReceive(touch_queue, &current_coords, 0) == pdTRUE){
+          Vector<float> drag_velocity = {
+            .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
+            .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD
+          };
+          velocity_field->index(current_coords.x, current_coords.y) = drag_velocity;
           last_coords = current_coords;
         }
         n_fails = 0;
@@ -276,10 +285,10 @@ void stats_routine(void* args){
     for(int i = 0; i < 5; i++)
       pct_taken[i] = 100*time_taken[i]/total_time;
 
-    Serial.print("Refresh rate: ");
+    Serial.print("FPS: ");
     Serial.print(refresh_rate, 1);
     Serial.print(", ");
-    Serial.print("Percent time taken: (");
+    Serial.print("Pct times: (");
     for(int i = 0; i < 5; i++){
       Serial.print(pct_taken[i], 1);
       Serial.print("%");
@@ -287,14 +296,16 @@ void stats_routine(void* args){
     }
     Serial.print(")");
     Serial.print(", ");
-    Serial.print("Current error: +/- ");
+    Serial.print("Err now: +/- ");
     Serial.print(local_stats.current_abs_pct_density, 1);
     Serial.print("%");
     Serial.print(", ");
-    Serial.print("Max error: +/- ");
+    Serial.print("Err max: +/- ");
     Serial.print(local_stats.max_abs_pct_density, 1);
     Serial.print("%");
     Serial.print(", ");
+    Serial.print("Touch queue sz: ");
+    Serial.print(uxQueueMessagesWaiting(touch_queue));
     Serial.println();
   }
 }
