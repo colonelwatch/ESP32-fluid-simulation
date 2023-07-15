@@ -53,52 +53,6 @@ struct stats{
 struct stats global_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
 
 
-void draw_routine(void* args){
-  // Serial.println("Setting up TFT screen...");
-  tft.init();
-  tft.fillScreen(TFT_BLACK);
-  tft.initDMA();
-  while(1){
-    xSemaphoreTake(color_semaphore, portMAX_DELAY);
-    xSemaphoreTake(color_mutex, portMAX_DELAY);
-    int buffer_select = 0;
-
-    tft.startWrite(); // start a single transfer for all the tiles
-
-    for(int ii = 0; ii < N_TILES; ii++){
-      for(int jj = 0; jj < M_TILES; jj++){
-        int i_start = ii*TILE_HEIGHT, j_start = jj*TILE_WIDTH,
-            i_end = (ii+1)*TILE_HEIGHT, j_end = (jj+1)*TILE_WIDTH;
-        int i_cell_start = i_start/SCALING, j_cell_start = j_start/SCALING,
-            i_cell_end = i_end/SCALING, j_cell_end = j_end/SCALING;
-
-        for(int i_cell = i_cell_start; i_cell < i_cell_end; i_cell++){
-          for(int j_cell = j_cell_start; j_cell < j_cell_end; j_cell++){
-            int r = red_field->index(i_cell, j_cell)*255,
-                g = green_field->index(i_cell, j_cell)*255,
-                b = blue_field->index(i_cell, j_cell)*255;
-            
-            // don't go out of bounds
-            if(r < 0) r = 0; else if(r > 255) r = 255;
-            if(g < 0) g = 0; else if(g > 255) g = 255;
-            if(b < 0) b = 0; else if(b > 255) b = 255;
-            
-            int i_local = i_cell*SCALING-i_start, j_local = j_cell*SCALING-j_start;
-            tiles[buffer_select].fillRect(j_local, i_local, SCALING, SCALING, tft.color565(r, g, b));
-          }
-        }
-
-        tft.pushImageDMA(j_start, i_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
-        buffer_select = buffer_select? 0 : 1;
-      }
-    }
-
-    tft.endWrite();
-
-    xSemaphoreGive(color_mutex);
-  }
-}
-
 void touch_routine(void *args){
   ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   ts.begin(ts_spi);
@@ -261,6 +215,53 @@ void sim_routine(void* args){
     }
 
     vTaskDelay(1); // give a tick to lower-priority tasks (including the IDLE task?)
+  }
+}
+
+
+void draw_routine(void* args){
+  // Serial.println("Setting up TFT screen...");
+  tft.init();
+  tft.fillScreen(TFT_BLACK);
+  tft.initDMA();
+  while(1){
+    xSemaphoreTake(color_semaphore, portMAX_DELAY);
+    xSemaphoreTake(color_mutex, portMAX_DELAY);
+    int buffer_select = 0;
+
+    tft.startWrite(); // start a single transfer for all the tiles
+
+    for(int ii = 0; ii < N_TILES; ii++){
+      for(int jj = 0; jj < M_TILES; jj++){
+        int i_start = ii*TILE_HEIGHT, j_start = jj*TILE_WIDTH,
+            i_end = (ii+1)*TILE_HEIGHT, j_end = (jj+1)*TILE_WIDTH;
+        int i_cell_start = i_start/SCALING, j_cell_start = j_start/SCALING,
+            i_cell_end = i_end/SCALING, j_cell_end = j_end/SCALING;
+
+        for(int i_cell = i_cell_start; i_cell < i_cell_end; i_cell++){
+          for(int j_cell = j_cell_start; j_cell < j_cell_end; j_cell++){
+            int r = red_field->index(i_cell, j_cell)*255,
+                g = green_field->index(i_cell, j_cell)*255,
+                b = blue_field->index(i_cell, j_cell)*255;
+            
+            // don't go out of bounds
+            if(r < 0) r = 0; else if(r > 255) r = 255;
+            if(g < 0) g = 0; else if(g > 255) g = 255;
+            if(b < 0) b = 0; else if(b > 255) b = 255;
+            
+            int i_local = i_cell*SCALING-i_start, j_local = j_cell*SCALING-j_start;
+            tiles[buffer_select].fillRect(j_local, i_local, SCALING, SCALING, tft.color565(r, g, b));
+          }
+        }
+
+        tft.pushImageDMA(j_start, i_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
+        buffer_select = buffer_select? 0 : 1;
+      }
+    }
+
+    tft.endWrite();
+
+    xSemaphoreGive(color_mutex);
   }
 }
 
