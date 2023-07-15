@@ -8,12 +8,12 @@
 #include "Field.h"
 #include "operations.h"
 
-// assuming that screen aspect ratio matches domain aspect ratio
-#define N_ROWS 80
-#define N_COLS 60
-#define SCALING 4 // integer scaling -> screen size is inferred from this
+// configurables
+#define N_ROWS 80 // size of sim domain
+#define N_COLS 60 // size of sim domain
+#define SCALING 4 // integer scaling of domain -> screen size is inferred from this
 #define TILE_HEIGHT 80 // multiple of SCALING and a factor of (N_ROWS*SCALING)
-#define TILE_WIDTH 60 // multiple of SCALING and a factor of (N_COLS*SCALING)
+#define TILE_WIDTH 60  // multiple of SCALING and a factor of (N_COLS*SCALING)
 #define DT 1/12.0 // s, size of time step in sim time (should roughly match real FPS)
 #define POLLING_PERIOD 20 // ms, for the touch screen
 // #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
@@ -55,7 +55,7 @@ struct stats{
   float max_abs_pct_density; // "max" -> worst over domain and all time
   int refresh_count;
 };
-struct stats global_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
+struct stats global_stats;
 
 
 void touch_routine(void *args){
@@ -78,15 +78,17 @@ void touch_routine(void *args){
 
 
 void sim_routine(void* args){
-  bool dragging = false; int n_fails = 0; // together form the state
-  Vector<uint16_t> last_coords, current_coords;
+  bool dragging = false; int n_fails = 0; // n_fails \in {0, 1, ..., 4}, together form the state of the dragging FSM
+  Vector<uint16_t> last_coords, current_coords; // control application of dragging into the velocity field
   
+  // local stats and timing the reporting of those stats
   unsigned long now, last_reported = millis();
   struct stats local_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
   
   while(1){
-    local_stats.point_timestamps[0] = millis();
+    local_stats.point_timestamps[0] = millis(); // holds the millis() for when calculating the time step started
     
+
     // Swap the velocity field with the advected one
     Field<Vector<float>> *to_delete_vector = velocity_field,
         *temp_vector_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
@@ -97,6 +99,7 @@ void sim_routine(void* args){
     local_stats.point_timestamps[1] = millis();
 
 
+    // FSM for detecting dragging and applying that dragging to the velocity field
     bool touched = xQueuePeek(touch_queue, &current_coords, 0); // we define touched as "the queue is not empty"
     if(!dragging){ // n_fails is a don't-care here
       if(touched){
@@ -107,7 +110,7 @@ void sim_routine(void* args){
             .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
             .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD
           };
-          velocity_field->index(current_coords.x, current_coords.y) = drag_velocity; // boundary condition?
+          velocity_field->index(current_coords.x, current_coords.y) = drag_velocity; // Dirchlet boundary condition
           last_coords = current_coords;
         }
         n_fails = 0;
@@ -133,10 +136,10 @@ void sim_routine(void* args){
           dragging = false;
       }
     }
-    // dragging && n_fails >= 5 should never happen
+    // dragging && n_fails >= 3 should never happen
 
 
-    // Zero out the divergence of the new velocity field
+    // Get a divergence-free projection of the velocity field
     const float sor_omega = 1.90; // 1.0 reverts SOR to Gauss-Seidel, but 2/(1+sin(pi/60)) = 1.90 is optimal?
     Field<float> *divergence_field = new Field<float>(N_ROWS, N_COLS, DONTCARE),
         *pressure_field = new Field<float>(N_ROWS, N_COLS, CLONE);
@@ -172,7 +175,7 @@ void sim_routine(void* args){
     blue_field = temp_color_field;
     temp_color_field = temp;
 
-    delete temp_color_field; // drop the memory that go rotated out
+    delete temp_color_field; // drop the memory that got rotated out
 
     // Release the color field and allow the draw routine to use it
     xSemaphoreGive(color_mutex);
@@ -227,10 +230,10 @@ void sim_routine(void* args){
 
 
 void draw_routine(void* args){
-  // Serial.println("Setting up TFT screen...");
   tft.init();
   tft.fillScreen(TFT_BLACK);
   tft.initDMA();
+
   while(1){
     xSemaphoreTake(color_semaphore, portMAX_DELAY);
     xSemaphoreTake(color_mutex, portMAX_DELAY);
@@ -339,7 +342,7 @@ void setup(void) {
   
   
   // Init the raw fields using rules, then smooth them with the kernel for the final color fields
-  Serial.println("Initializaing color fields...");
+  Serial.println("Initializing color fields...");
   float kernel[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
   red_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   green_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
@@ -392,16 +395,14 @@ void setup(void) {
   blue_field->update_boundary();
 
 
-  Serial.println("Initaliziation complete!");
-
-
   Serial.println("Launching tasks...");
   xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-1, NULL);
   xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-2, NULL);
   xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
   xTaskCreate(stats_routine, "stats", 2000, NULL, configMAX_PRIORITIES-4, NULL);
 
-  vTaskDelete(NULL);
+
+  vTaskDelete(NULL); // delete the setup-and-loop task
 }
 
 
