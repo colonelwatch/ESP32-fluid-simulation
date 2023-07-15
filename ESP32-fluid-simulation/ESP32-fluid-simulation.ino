@@ -17,21 +17,9 @@
 #define DT 0.1
 #define POLLING_PERIOD 20 // ms, for the touch screen
 
-TFT_eSPI tft = TFT_eSPI();
-const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
 
-// we'll use the two tiles for double-buffering
-TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)};
-uint16_t *tile_buffers[2] = {
-    (uint16_t*)tiles[0].createSprite(TILE_WIDTH, TILE_HEIGHT), 
-    (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
-const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
-
-SemaphoreHandle_t color_mutex, // mutex protects simultaneous read/write...
-    color_semaphore; // ... but semaphore predicates read on an unread write
-Field<Vector<float>> *velocity_field;
-Field<iram_float_t> *red_field, *green_field, *blue_field;
-
+// touch resources
+QueueHandle_t touch_queue;
 const int XPT2046_MOSI = 32;
 const int XPT2046_MISO = 39;
 const int XPT2046_CLK = 25;
@@ -39,8 +27,22 @@ const int XPT2046_CS = 33;
 SPIClass ts_spi = SPIClass(HSPI);
 XPT2046_Touchscreen ts(XPT2046_CS); // TODO: use the IRQ pin?
 
-QueueHandle_t touch_queue;
+// essential sim resources
+Field<Vector<float>> *velocity_field;
+Field<iram_float_t> *red_field, *green_field, *blue_field;
 
+// draw resources
+SemaphoreHandle_t color_mutex, // mutex protects simultaneous read/write...
+    color_semaphore; // ... but semaphore predicates read on an unread write
+TFT_eSPI tft = TFT_eSPI();
+TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)}; // we'll use the two tiles for double-buffering
+uint16_t *tile_buffers[2] = {
+    (uint16_t*)tiles[0].createSprite(TILE_WIDTH, TILE_HEIGHT), 
+    (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
+const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
+const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
+
+// stats resources
 SemaphoreHandle_t stats_mutex, stats_semaphore;
 struct stats{
   unsigned long point_timestamps[6];
