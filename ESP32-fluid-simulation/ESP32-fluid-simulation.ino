@@ -16,6 +16,7 @@
 #define TILE_WIDTH 60 // multiple of SCALING and a factor of (N_COLS*SCALING)
 #define DT 0.1
 #define POLLING_PERIOD 20 // ms, for the touch screen
+// #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
 
 
 // touch resources
@@ -180,6 +181,7 @@ void sim_routine(void* args){
     local_stats.point_timestamps[4] = millis();
 
 
+    #ifdef DIVERGENCE_TRACKING
     // Assuming density is constant over the domain in the current time (which 
     //  is only a correct assumption if the divergence is equal to zero for all 
     //  time because the density is obviously constant over the domain at t=0), 
@@ -200,6 +202,7 @@ void sim_routine(void* args){
     if(local_stats.current_abs_pct_density > local_stats.max_abs_pct_density)
       local_stats.max_abs_pct_density = local_stats.current_abs_pct_density;
     delete new_divergence_field;
+    #endif
 
     local_stats.point_timestamps[5] = millis();
 
@@ -303,6 +306,8 @@ void stats_routine(void* args){
     }
     Serial.print(")");
     Serial.print(", ");
+
+    #ifdef DIVERGENCE_TRACKING
     Serial.print("Err now: +/- ");
     Serial.print(local_stats.current_abs_pct_density, 1);
     Serial.print("%");
@@ -311,6 +316,8 @@ void stats_routine(void* args){
     Serial.print(local_stats.max_abs_pct_density, 1);
     Serial.print("%");
     Serial.print(", ");
+    #endif
+
     Serial.print("Touch queue sz: ");
     Serial.print(uxQueueMessagesWaiting(touch_queue));
     Serial.println();
