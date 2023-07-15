@@ -41,10 +41,14 @@ XPT2046_Touchscreen ts(XPT2046_CS); // TODO: use the IRQ pin?
 
 QueueHandle_t touch_queue;
 
-unsigned long last_reported;
-unsigned long point_timestamps[5];
-float max_abs_pct_density = 0;
-int refresh_count = 0;
+SemaphoreHandle_t stats_mutex, stats_semaphore;
+struct stats{
+  unsigned long point_timestamps[6];
+  float current_abs_pct_density; // "current" -> worst over domain at current time
+  float max_abs_pct_density; // "max" -> worst over domain and all time
+  int refresh_count;
+};
+struct stats global_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
 
 
 void draw_routine(void* args){
@@ -116,7 +120,12 @@ void sim_routine(void* args){
   bool dragging = false; int n_fails = 0; // together form the state
   Vector<uint16_t> last_coords, current_coords;
   
+  unsigned long now, last_reported = millis();
+  struct stats local_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
+  
   while(1){
+    local_stats.point_timestamps[0] = millis();
+    
     // Swap the velocity field with the advected one
     Field<Vector<float>> *to_delete_vector = velocity_field,
         *temp_vector_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
@@ -124,8 +133,7 @@ void sim_routine(void* args){
     velocity_field = temp_vector_field;
     delete to_delete_vector;
 
-    if(refresh_count == 0) // if this is the first refresh since the last report, collect the timestamp
-      point_timestamps[0] = millis();
+    local_stats.point_timestamps[1] = millis();
 
 
     bool touched = xQueuePeek(touch_queue, &current_coords, 0); // we define touched as "the queue is not empty"
@@ -168,12 +176,12 @@ void sim_routine(void* args){
     delete divergence_field;
     delete pressure_field;
 
-    if(refresh_count == 0) point_timestamps[1] = millis();
+    local_stats.point_timestamps[2] = millis();
 
 
     // Wait for the color field to be released by the draw routine, and time this wait
     xSemaphoreTake(color_mutex, portMAX_DELAY);
-    if(refresh_count == 0) point_timestamps[2] = millis();
+    local_stats.point_timestamps[3] = millis();
 
 
     // Replace the color field with the advected one, but do so by rotating the memory used
@@ -200,7 +208,7 @@ void sim_routine(void* args){
     xSemaphoreGive(color_mutex);
     xSemaphoreGive(color_semaphore);
     
-    if(refresh_count == 0) point_timestamps[3] = millis();
+    local_stats.point_timestamps[4] = millis();
 
 
     // Assuming density is constant over the domain in the current time (which 
@@ -212,58 +220,82 @@ void sim_routine(void* args){
     // Furthermore, I'd argue that "expected density error in pct" is equal to 
     //  the divergence times the time step. This is a thing we can track.
     // TODO: research this and find a source?
-    float current_abs_divergence = 0, current_abs_pct_density; // "current" -> worst over domain at current time
+    float current_abs_divergence = 0; // "current" -> worst over domain at current time
     Field<float> *new_divergence_field = new Field<float>(N_ROWS, N_COLS, DONTCARE); // "new" divergence after projection
     divergence(new_divergence_field, velocity_field);
     for(int i = 0; i < N_ROWS; i++)
       for(int j = 0; j < N_COLS; j++)
         if(abs(new_divergence_field->index(i, j)) > current_abs_divergence)
           current_abs_divergence = abs(new_divergence_field->index(i, j));
-    current_abs_pct_density = 100*current_abs_divergence*DT;
-    if(current_abs_pct_density > max_abs_pct_density) max_abs_pct_density = current_abs_pct_density;
+    local_stats.current_abs_pct_density = 100*current_abs_divergence*DT;
+    if(local_stats.current_abs_pct_density > local_stats.max_abs_pct_density)
+      local_stats.max_abs_pct_density = local_stats.current_abs_pct_density;
     delete new_divergence_field;
 
-    if(refresh_count == 0) point_timestamps[4] = millis();
+    local_stats.point_timestamps[5] = millis();
 
 
-    // Every 5 seconds, print out the calculated stats including the refresh rate
-    refresh_count++;
-    long now = millis();
-    if(now-last_reported > 5000){
-      float refresh_rate = 1000*(float)refresh_count/(now-last_reported);
+    // Update the global stats
+    now = millis();
+    local_stats.refresh_count++;
+    if(now - last_reported > 5000){
+      xSemaphoreTake(stats_mutex, portMAX_DELAY);
+      global_stats = local_stats;
+      xSemaphoreGive(stats_mutex);
+      xSemaphoreGive(stats_semaphore);
 
-      float time_taken[5], total_time, pct_taken[5];
-      time_taken[0] = (point_timestamps[0]-last_reported)/1000.0;
-      for(int i = 1; i < 5; i++)
-        time_taken[i] = (point_timestamps[i]-point_timestamps[i-1])/1000.0;
-      total_time = (point_timestamps[4]-last_reported)/1000.0;
-      for(int i = 0; i < 5; i++)
-        pct_taken[i] = 100*time_taken[i]/total_time;
-
-      Serial.print("Refresh rate: ");
-      Serial.print(refresh_rate, 1);
-      Serial.print(", ");
-      Serial.print("Percent time taken: (");
-      for(int i = 0; i < 5; i++){
-        Serial.print(pct_taken[i], 1);
-        Serial.print("%");
-        if(i < 4) Serial.print(", ");
-      }
-      Serial.print(")");
-      Serial.print(", ");
-      Serial.print("Current error: +/- ");
-      Serial.print(current_abs_pct_density, 1);
-      Serial.print("%");
-      Serial.print(", ");
-      Serial.print("Max error: +/- ");
-      Serial.print(max_abs_pct_density, 1);
-      Serial.print("%");
-      Serial.print(", ");
-      Serial.println();
-
-      refresh_count = 0;
+      // don't reset max_abs_pct_density because it's a running max
       last_reported = now;
+      local_stats.refresh_count = 0;
     }
+
+    vTaskDelay(1); // give a tick to lower-priority tasks (including the IDLE task?)
+  }
+}
+
+
+void stats_routine(void* args){
+  struct stats local_stats;
+  unsigned long now, last_reported = millis(), elapsed;
+  while(1){
+    xSemaphoreTake(stats_semaphore, portMAX_DELAY);
+    xSemaphoreTake(stats_mutex, portMAX_DELAY);
+    local_stats = global_stats;
+    global_stats.refresh_count = 0;
+    xSemaphoreGive(stats_mutex);
+
+    now = millis();
+    elapsed = now - last_reported;
+    last_reported = now;
+
+    float refresh_rate = 1000*(float)local_stats.refresh_count/elapsed;
+    float time_taken[5], total_time, pct_taken[5];
+    for(int i = 0; i < 5; i++)
+      time_taken[i] = (local_stats.point_timestamps[i+1]-local_stats.point_timestamps[i])/1000.0;
+    total_time = (local_stats.point_timestamps[5]-local_stats.point_timestamps[0])/1000.0;
+    for(int i = 0; i < 5; i++)
+      pct_taken[i] = 100*time_taken[i]/total_time;
+
+    Serial.print("Refresh rate: ");
+    Serial.print(refresh_rate, 1);
+    Serial.print(", ");
+    Serial.print("Percent time taken: (");
+    for(int i = 0; i < 5; i++){
+      Serial.print(pct_taken[i], 1);
+      Serial.print("%");
+      if(i < 4) Serial.print(", ");
+    }
+    Serial.print(")");
+    Serial.print(", ");
+    Serial.print("Current error: +/- ");
+    Serial.print(local_stats.current_abs_pct_density, 1);
+    Serial.print("%");
+    Serial.print(", ");
+    Serial.print("Max error: +/- ");
+    Serial.print(local_stats.max_abs_pct_density, 1);
+    Serial.print("%");
+    Serial.print(", ");
+    Serial.println();
   }
 }
 
@@ -304,16 +336,18 @@ void setup(void) {
 
 
   Serial.println("Initaliziation complete!");
-  last_reported = millis();
 
 
   Serial.println("Launching tasks...");
   touch_queue = xQueueCreate(10, sizeof(Vector<uint16_t>));
   color_semaphore = xSemaphoreCreateBinary();
   color_mutex = xSemaphoreCreateMutex();
+  stats_semaphore = xSemaphoreCreateBinary();
+  stats_mutex = xSemaphoreCreateMutex();
   xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-1, NULL);
   xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-2, NULL);
   xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
+  xTaskCreate(stats_routine, "stats", 2000, NULL, configMAX_PRIORITIES-4, NULL);
 
   vTaskDelete(NULL);
 }
