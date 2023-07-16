@@ -1,6 +1,6 @@
 #include <SPI.h>
 
-#include <TFT_eSPI.h>
+#include <TFT_eSPI.h> // WARNING: before uploading, acquire custom User_Setup.h (see monorepo)
 #include <XPT2046_Touchscreen.h>
 
 #include "iram_float.h"

@@ -11,7 +11,7 @@ That said, it only runs at 12fps, and it isn't what I originally wanted to make:
 
 ## Running
 
-This project is built in Arduino, and the only dependencies are [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) and [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen). Vendors for the CYD can be found through the monorepo. There is also code that will run the same fluid simulation on a PC. Navigate to the repo directory then call:
+This project is built in Arduino, and the only dependencies are [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) (this requires a custom `User_Setup.h` first, see the monorepo for one working example) and [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen). Vendors for the CYD can be found through the monorepo. There is also code that will run the same fluid simulation on a PC. Navigate to the repo directory then call:
 
 ```
 g++ test/fluid_simulation.cpp -O3 -Wall
