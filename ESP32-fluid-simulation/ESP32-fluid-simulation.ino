@@ -1,5 +1,7 @@
 #include <SPI.h>
+#include <FS.h>
 
+#include <TJpg_Decoder.h>
 #include <TFT_eSPI.h> // WARNING: before uploading, acquire custom User_Setup.h (see monorepo)
 #include <XPT2046_Touchscreen.h>
 
@@ -17,6 +19,16 @@
 #define DT 1/12.0 // s, size of time step in sim time (should roughly match real FPS)
 #define POLLING_PERIOD 20 // ms, for the touch screen
 // #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
+
+
+// init resources
+const int SD_SCK = 18;
+const int SD_MISO = 19;
+const int SD_MOSI = 23;
+const int SD_CS = 5;
+SPIClass sd_spi = SPIClass(HSPI);
+bool jpeg_callback(int16_t, int16_t, uint16_t, uint16_t, uint16_t*);
+RTC_NOINIT_ATTR char next_filename[512]; // selects image, holds through software resets (TODO: don't use a reset!)
 
 
 // touch resources
@@ -86,6 +98,11 @@ void sim_routine(void* args){
   struct stats local_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
   
   while(1){
+    // For now, pressing the boot button intentionally crashes the ESP32, and 
+    //  from there a software reboot loads a new image. On the other hand, 
+    //  pressing the reset button is a hardware reboot.
+    if(digitalRead(0) == LOW) esp_restart();
+    
     local_stats.point_timestamps[0] = millis(); // holds the millis() for when calculating the time step started
     
 
@@ -341,58 +358,57 @@ void setup(void) {
   velocity_field->update_boundary();
   
   
-  // Init the raw fields using rules, then smooth them with the kernel for the final color fields
-  Serial.println("Initializing color fields...");
-  float kernel[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
+  Serial.println("Initializing color fields from the SD card...");
   red_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   green_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
   blue_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
 
-  const int center_i = N_ROWS/2, center_j = N_COLS/2;
-  for(int i = 0; i < N_ROWS; i++){
-    for(int j = 0; j < N_COLS; j++){
-      red_field->index(i, j) = 0;
-      green_field->index(i, j) = 0;
-      blue_field->index(i, j) = 0;
+  // Init the SD card
+  sd_spi.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+  SD.begin(SD_CS, sd_spi, 80000000);
 
-      float angle = atan2(i-center_i, j-center_j);
-      if((angle >= -PI && angle < -PI/3)) red_field->index(i, j) = 1.0;
-      else if(angle >= -PI/3 && angle < PI/3) green_field->index(i, j) = 1.0;
-      else blue_field->index(i, j) = 1.0;
+  // search for the current filename and the next filename
+  bool filename_found;
+  File root, image_file, next_image_file;
+  esp_reset_reason_t reason = esp_reset_reason(); // track whether the last restart was software or not
+  root = SD.open("/");
+  if ((reason != ESP_RST_DEEPSLEEP) && (reason != ESP_RST_SW)) do{  // traverse until any valid filename is found
+    image_file = root.openNextFile();
+    String filename = image_file.name();
+    filename_found = filename.endsWith(".jpg") || filename.endsWith(".JPG") || 
+        filename.endsWith(".jpeg") || filename.endsWith(".JPEG");
+  } while(!filename_found);
+  else do {                           // the next filename was chosen in last restart, traverse until it is found
+    image_file = root.openNextFile();
+    String filename = image_file.name();
+    filename_found = (filename == next_filename);
+  } while(!filename_found);
+  do { // now traverse from where we left off until the next valid filename is found
+    next_image_file = root.openNextFile();
+    if(!next_image_file){ // loop back to the beginning if the end was reached
+      root.rewindDirectory();
+      next_image_file = root.openNextFile();
     }
-  }
+    String filename = next_image_file.name();
+    filename_found = filename.endsWith(".jpg") || filename.endsWith(".JPG") || 
+        filename.endsWith(".jpeg") || filename.endsWith(".JPEG");
+  } while(!filename_found);
+
+  strcpy(next_filename, next_image_file.name()); // put the next filename in RTC RAM
+
+  // decode the image determined by the current filename
+  TJpgDec.setJpgScale(1);
+  TJpgDec.setCallback(jpeg_callback);
+  TJpgDec.drawFsJpg(0, 0, image_file);
 
   red_field->update_boundary();
   green_field->update_boundary();
   blue_field->update_boundary();
 
-  for(int i = 0; i < N_ROWS; i++){
-    for(int j = 0; j < N_COLS; j++){
-      float smoothed_red = 0, smoothed_green = 0, smoothed_blue = 0;
 
-      for(int di = 0; di < 3; di++){
-        for(int dj = 0; dj < 3; dj++){
-          int ii = i+di, jj = j+dj;
-
-          // extend the edge of the field by repeating the last row/column
-          if(ii > N_ROWS-1) ii = N_ROWS-1;
-          if(jj > N_COLS-1) jj = N_COLS-1;
-          
-          smoothed_red += kernel[di][dj]*red_field->index(ii, jj);
-          smoothed_green += kernel[di][dj]*green_field->index(ii, jj);
-          smoothed_blue += kernel[di][dj]*blue_field->index(ii, jj);
-        }
-      }
-
-      red_field->index(i, j) = smoothed_red;
-      green_field->index(i, j) = smoothed_green;
-      blue_field->index(i, j) = smoothed_blue;
-    }
-  }
-
-  red_field->update_boundary();
-  green_field->update_boundary();
-  blue_field->update_boundary();
+  Serial.println("Stopping the SD card...");
+  SD.end(); // stop the SD card...
+  sd_spi.end(); // ...because it shares the HSPI bus with the XPT2046
 
 
   Serial.println("Launching tasks...");
@@ -408,4 +424,21 @@ void setup(void) {
 
 void loop(void) {
   // Not actually used
+}
+
+
+bool jpeg_callback(int16_t start_x, int16_t start_y, uint16_t width, uint16_t height, uint16_t* bitmap){
+  for(int i = 0; i < height; i++){
+    for(int j = 0; j < width; j++){
+      int ii = start_x+j, jj = N_COLS-1-(start_y+i);
+      if(ii < 0 || ii >= N_ROWS || jj < 0 || jj >= N_COLS) continue;
+
+      uint16_t rgb565 = bitmap[i * width + j];
+      red_field->index(ii, jj) = ((rgb565 >> 11) & 0x1F)/31.0;
+      green_field->index(ii, jj) = ((rgb565 >> 5) & 0x3F)/63.0;
+      blue_field->index(ii, jj) = (rgb565 & 0x1F)/31.0;
+    }
+  }
+
+  return true;
 }
