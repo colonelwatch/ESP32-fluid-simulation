@@ -20,7 +20,11 @@
 
 
 // touch resources
-QueueHandle_t touch_queue = xQueueCreate(10, sizeof(Vector<uint16_t>));
+struct touch{
+  Vector<uint16_t> coords;
+  Vector<float> velocity;
+};
+QueueHandle_t touch_queue = xQueueCreate(10, sizeof(struct touch));
 const int XPT2046_IRQ = 36;
 const int XPT2046_MOSI = 32;
 const int XPT2046_MISO = 39;
@@ -62,14 +66,63 @@ void touch_routine(void *args){
   ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   ts.begin(ts_spi);
 
+  Vector<uint16_t> last_coords, current_coords; // used for calculating the velocity
+  bool dragging = false; int n_fails = 0; // n_fails \in {0, 1, ..., 4}, together form the state of the "dragging" FSM
+  
   while(1){
-    if(ts.tirqTouched() && ts.touched()){
-      // the output falls in a 4096x4096 domain and follows the i-j scheme...
-      // ... but we'll map to a N_ROWSxN_COLS domain and the x-y scheme
+    // invoke the tirqTouched and touched routines to check if the screen is touched
+    bool touched = ts.tirqTouched() && ts.touched();
+
+    // get the touch coordinates if we're supposed to
+    if(touched){
+      last_coords = current_coords; // current_coords is now history
+      
+      // the output follows the x-y scheme, but my velocities are expressed in 
+      //  the x-y scheme while the coords are expressed in the i-j scheme. 
+      //  I'll convert now then calculate the velocities with this conversion 
+      //  in mind later.
+      // furthermore, we'll map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
-      Vector<uint16_t> mapped_coords = {raw_coords.x * N_ROWS / 4096, 
-          (4096-raw_coords.y) * N_COLS / 4096}; 
-      xQueueSend(touch_queue, &mapped_coords, 0); // TODO: don't just use send and pray
+      current_coords = (Vector<uint16_t>){
+          .x = (uint16_t)(raw_coords.x * N_ROWS / 4096), 
+          .y = (uint16_t)((4096-raw_coords.y) * N_COLS / 4096)};
+    }
+    // else current_coords should never end up being used
+
+    // "Dragging" FSM for deciding when to send a touch struct (velocity and location)
+    bool send_touch = false;
+    if(!dragging){ // n_fails is a don't-care here
+      if(touched){
+        send_touch = false; // we need two points for velocity, but this is only the first
+        dragging = true; n_fails = 0; // update state
+      }
+      else{
+        send_touch = false; // obviously
+        // state doesn't change
+      }
+    }
+    else if(dragging && n_fails < 3){
+      if(touched){
+        send_touch = true; // we have two points for velocity, so send the touch struct
+        // state doesn't change here
+      }
+      else{
+        // update state (only flip back to not dragging if we've failed 3 times)
+        n_fails++;
+        if(n_fails == 3)
+          dragging = false;
+      }
+    }
+    // dragging && n_fails >= 3 should never happen
+
+    // send the touch struct if we're supposed to
+    if(send_touch){
+      // calculate and send the velocity and location
+      Vector<float> current_velocity = { // calculated with x-y scheme in mind
+          .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
+          .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD};
+      struct touch current_touch = { .coords = current_coords, .velocity = current_velocity };
+      xQueueSend(touch_queue, &current_touch, 0); // TODO: don't just use send and pray
     }
 
     vTaskDelay(POLLING_PERIOD / portTICK_PERIOD_MS);
@@ -78,9 +131,6 @@ void touch_routine(void *args){
 
 
 void sim_routine(void* args){
-  bool dragging = false; int n_fails = 0; // n_fails \in {0, 1, ..., 4}, together form the state of the dragging FSM
-  Vector<uint16_t> last_coords, current_coords; // control application of dragging into the velocity field
-  
   // local stats and timing the reporting of those stats
   unsigned long now, last_reported = millis();
   struct stats local_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
@@ -99,45 +149,10 @@ void sim_routine(void* args){
     local_stats.point_timestamps[1] = millis();
 
 
-    // FSM for detecting dragging and applying that dragging to the velocity field
-    bool touched = xQueuePeek(touch_queue, &current_coords, 0); // we define touched as "the queue is not empty"
-    if(!dragging){ // n_fails is a don't-care here
-      if(touched){
-        dragging = true;
-        xQueueReceive(touch_queue, &last_coords, 0); // read the first coords as the beginning of the dragging
-        while(xQueueReceive(touch_queue, &current_coords, 0) == pdTRUE){ // empty the queue
-          Vector<float> drag_velocity = { // TODO: I had to do another i-j to x-y conversion here, is that right?
-            .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
-            .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD
-          };
-          velocity_field->index(current_coords.x, current_coords.y) = drag_velocity; // Dirchlet boundary condition
-          last_coords = current_coords;
-        }
-        n_fails = 0;
-      }
-      // else do nothing
-    }
-    else if(dragging && n_fails < 3){
-      if(touched){
-        // since we're continuing the dragging from before, we don't need to read the first coords
-        while(xQueueReceive(touch_queue, &current_coords, 0) == pdTRUE){
-          Vector<float> drag_velocity = {
-            .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
-            .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD
-          };
-          velocity_field->index(current_coords.x, current_coords.y) = drag_velocity;
-          last_coords = current_coords;
-        }
-        n_fails = 0;
-      }
-      else{
-        n_fails++;
-        if(n_fails == 3)
-          dragging = false;
-      }
-    }
-    // dragging && n_fails >= 3 should never happen
-
+    // apply the captured drag (encoded as a sequence of touch structs) to the velocity field
+    struct touch current_touch;
+    while(xQueueReceive(touch_queue, &current_touch, 0) == pdTRUE) // empty the queue
+      velocity_field->index(current_touch.coords.x, current_touch.coords.y) = current_touch.velocity;
     velocity_field->update_boundary(); // in case the dragging went near the boundary, we need to update it
 
 
