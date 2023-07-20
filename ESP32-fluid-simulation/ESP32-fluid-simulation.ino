@@ -40,8 +40,8 @@ Field<Vector<float>> *velocity_field;
 Field<iram_float_t> *red_field, *green_field, *blue_field;
 
 // draw resources
-SemaphoreHandle_t color_mutex = xSemaphoreCreateMutex(), // mutex protects simultaneous read/write...
-    color_semaphore = xSemaphoreCreateBinary(); // ... but semaphore predicates read on an unread write
+SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary(), // read preceded by a write, and vice versa
+    color_produced = xSemaphoreCreateBinary();
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)}; // we'll use the two tiles for double-buffering
 uint16_t *tile_buffers[2] = {
@@ -51,8 +51,8 @@ const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
 const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
 
 // stats resources
-SemaphoreHandle_t stats_mutex = xSemaphoreCreateMutex(), 
-    stats_semaphore = xSemaphoreCreateBinary();
+SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary(), 
+    stats_produced = xSemaphoreCreateBinary();
 struct stats{
   unsigned long point_timestamps[6];
   float current_abs_pct_density; // "current" -> worst over domain at current time
@@ -169,8 +169,8 @@ void sim_routine(void* args){
     local_stats.point_timestamps[2] = millis();
 
 
-    // Wait for the color field to be released by the draw routine, and time this wait
-    xSemaphoreTake(color_mutex, portMAX_DELAY);
+    // Wait for the color field to be read/consumed already, and time this wait
+    xSemaphoreTake(color_consumed, portMAX_DELAY);
     local_stats.point_timestamps[3] = millis();
 
 
@@ -194,9 +194,8 @@ void sim_routine(void* args){
 
     delete temp_color_field; // drop the memory that got rotated out
 
-    // Release the color field and allow the draw routine to use it
-    xSemaphoreGive(color_mutex);
-    xSemaphoreGive(color_semaphore);
+    // Signal that the color field has been written/produced as is ready to be read/consumed
+    xSemaphoreGive(color_produced);
     
     local_stats.point_timestamps[4] = millis();
 
@@ -231,10 +230,9 @@ void sim_routine(void* args){
     now = millis();
     local_stats.refresh_count++;
     if(now - last_reported > 5000){
-      xSemaphoreTake(stats_mutex, portMAX_DELAY);
+      xSemaphoreTake(stats_consumed, portMAX_DELAY);
       global_stats = local_stats;
-      xSemaphoreGive(stats_mutex);
-      xSemaphoreGive(stats_semaphore);
+      xSemaphoreGive(stats_produced);
 
       // don't reset max_abs_pct_density because it's a running max
       last_reported = now;
@@ -252,8 +250,7 @@ void draw_routine(void* args){
   tft.initDMA();
 
   while(1){
-    xSemaphoreTake(color_semaphore, portMAX_DELAY);
-    xSemaphoreTake(color_mutex, portMAX_DELAY);
+    xSemaphoreTake(color_produced, portMAX_DELAY);
     int buffer_select = 0;
 
     tft.startWrite(); // start a single transfer for all the tiles
@@ -288,7 +285,7 @@ void draw_routine(void* args){
 
     tft.endWrite();
 
-    xSemaphoreGive(color_mutex);
+    xSemaphoreGive(color_consumed);
   }
 }
 
@@ -297,11 +294,10 @@ void stats_routine(void* args){
   struct stats local_stats;
   unsigned long now, last_reported = millis(), elapsed;
   while(1){
-    xSemaphoreTake(stats_semaphore, portMAX_DELAY);
-    xSemaphoreTake(stats_mutex, portMAX_DELAY);
+    xSemaphoreTake(stats_produced, portMAX_DELAY);
     local_stats = global_stats;
     global_stats.refresh_count = 0;
-    xSemaphoreGive(stats_mutex);
+    xSemaphoreGive(stats_consumed);
 
     now = millis();
     elapsed = now - last_reported;
@@ -413,6 +409,8 @@ void setup(void) {
 
 
   Serial.println("Launching tasks...");
+  xSemaphoreGive(color_consumed); // start with a write not a read
+  xSemaphoreGive(stats_consumed);
   xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-1, NULL);
   xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-2, NULL);
   xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
