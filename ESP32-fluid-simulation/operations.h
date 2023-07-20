@@ -48,26 +48,6 @@ void semilagrangian_advect(Field<T> *new_property, const Field<T> *property, con
     new_property->update_boundary();
 }
 
-template<class T>
-void laplacian(Field<T> *del_dot_del_property, const Field<T> *property){
-    int N_i = del_dot_del_property->N_i, N_j = del_dot_del_property->N_j;
-    
-    for(int i = 0; i < N_i; i++){
-        for(int j = 0; j < N_j; j++){
-            T up, down, left, right, center;
-            center = property->index(i, j);
-            up = property->index(i-1, j);
-            down = property->index(i+1, j);
-            left = property->index(i, j-1);
-            right = property->index(i, j+1);
-
-            del_dot_del_property->index(i, j) = up+down+left+right-4*center;
-        }
-    }
-
-    del_dot_del_property->update_boundary();
-}
-
 template<class SCALAR_T, class VECTOR_T>
 void divergence(Field<SCALAR_T> *del_dot_velocity, const Field<VECTOR_T> *velocity){
     int N_i = del_dot_velocity->N_i, N_j = del_dot_velocity->N_j;
