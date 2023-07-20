@@ -138,6 +138,8 @@ void sim_routine(void* args){
     }
     // dragging && n_fails >= 3 should never happen
 
+    velocity_field->update_boundary(); // in case the dragging went near the boundary, we need to update it
+
 
     // Get a divergence-free projection of the velocity field
     const float sor_omega = 1.90; // 1.0 reverts SOR to Gauss-Seidel, but 2/(1+sin(pi/60)) = 1.90 is optimal?
