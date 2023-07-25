@@ -77,15 +77,13 @@ void touch_routine(void *args){
     if(touched){
       last_coords = current_coords; // current_coords is now history
       
-      // the output follows the x-y scheme, but my velocities are expressed in 
-      //  the x-y scheme while the coords are expressed in the i-j scheme. 
-      //  I'll convert now then calculate the velocities with this conversion 
-      //  in mind later.
+      // the output follows the x-y scheme, but my coords and velocities are in 
+      //  the i-j scheme. To convert, we'll swap x and y, and then flip the y
       // furthermore, we'll map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
       current_coords = (Vector<uint16_t>){
-          .x = (uint16_t)((4096-raw_coords.y) * N_ROWS / 4096), 
-          .y = (uint16_t)(raw_coords.x * N_COLS / 4096)};
+          .x = (uint16_t)((4096-raw_coords.y) * N_ROWS / 4096), // convert to the i-coordinate
+          .y = (uint16_t)(raw_coords.x * N_COLS / 4096)};       // convert to the j-coordinate
     }
     // else current_coords should never end up being used
 
@@ -118,9 +116,9 @@ void touch_routine(void *args){
     // send the touch struct if we're supposed to
     if(send_touch){
       // calculate and send the velocity and location
-      Vector<float> current_velocity = { // calculated with x-y scheme in mind
-          .x = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD,
-          .y = -((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD};
+      Vector<float> current_velocity = {
+          .x = ((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD,  // i-direction
+          .y = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD}; // j-direction
       struct touch current_touch = { .coords = current_coords, .velocity = current_velocity };
       xQueueSend(touch_queue, &current_touch, 0); // TODO: don't just use send and pray
     }

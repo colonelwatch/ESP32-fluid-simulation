@@ -11,9 +11,9 @@ template<class T>
 T billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22)
 {
     T x1, x2, interpolated;
-    x2 = p22*dj+p21*(1-dj);
-    x1 = p12*dj+p11*(1-dj);
-    interpolated = x2*di+x1*(1-di);
+    x1 = p11*(1-dj)+p12*dj; // interp between upper-left and upper-right
+    x2 = p21*(1-dj)+p22*dj; // interp between lower-left and lower-right
+    interpolated = x1*(1-di)+x2*di; // interp between upper and lower
     return interpolated;
 }
 
@@ -22,23 +22,21 @@ void semilagrangian_advect(Field<T> *new_property, const Field<T> *property, con
     int N_i = new_property->N_i, N_j = new_property->N_j;
     for(int i = 0; i < N_i; i++){
         for(int j = 0; j < N_j; j++){
-            // Get the source location, where we trace backwards and where +i-direction == -y-direction and 
-            //  +j-direction == +x-direction
             VECTOR_T displacement = dt*velocity->index(i, j);
-            VECTOR_T source = {j-displacement.x, i+displacement.y};
+            VECTOR_T source = {i-displacement.x, j-displacement.y};
 
             // Clamp the source location within the boundaries
-            if(source.y < -0.5f) source.y = -0.5f;
-            if(source.y > N_i-0.5f) source.y = N_i-0.5f;
             if(source.x < -0.5f) source.x = -0.5f;
-            if(source.x > N_j-0.5f) source.x = N_j-0.5f;
+            if(source.x > N_i-0.5f) source.x = N_i-0.5f;
+            if(source.y < -0.5f) source.y = -0.5f;
+            if(source.y > N_j-0.5f) source.y = N_j-0.5f;
 
             // Get the source value with billinear interpolation
-            int i11 = int(source.y), j11 = int(source.x), 
+            int i11 = int(source.x), j11 = int(source.y), 
                 i12 = i11, j12 = j11+1, 
                 i21 = i11+1, j21 = j11, 
                 i22 = i11+1, j22 = j11+1;
-            float di = source.y-i11, dj = source.x-j11;
+            float di = source.x-i11, dj = source.y-j11;
             T p11 = property->index(i11, j11), p12 = property->index(i12, j12),
                 p21 = property->index(i21, j21), p22 = property->index(i22, j22);
             T interpolated = billinear_interpolate(di, dj, p11, p12, p21, p22);
@@ -55,10 +53,10 @@ void divergence(Field<SCALAR_T> *del_dot_velocity, const Field<VECTOR_T> *veloci
     for(int i = 0; i < N_i; i++){
         for(int j = 0; j < N_j; j++){
             SCALAR_T upflow, downflow, leftflow, rightflow;
-            downflow = -velocity->index(i+1, j).y; // we'll take positive as the inward direction
-            upflow = velocity->index(i-1, j).y;
-            leftflow = -velocity->index(i, j-1).x;
-            rightflow = velocity->index(i, j+1).x;
+            upflow = -velocity->index(i-1, j).x;
+            downflow = velocity->index(i+1, j).x;
+            leftflow = -velocity->index(i, j-1).y;
+            rightflow = velocity->index(i, j+1).y;
 
             del_dot_velocity->index(i, j) = (upflow+downflow+leftflow+rightflow)/2;
         }
@@ -80,14 +78,14 @@ void sor_pressure(Field<SCALAR_T> *pressure, const Field<SCALAR_T> *divergence, 
     for(int k = 0; k < iterations; k++){
         for(int i = 0; i < N_i; i++){
             for(int j = 0; j < N_j; j++){
-                SCALAR_T divergence_center = divergence->index(i, j);
+                SCALAR_T div = divergence->index(i, j);
                 SCALAR_T up, down, left, right;
                 up = pressure->index(i-1, j);
                 down = pressure->index(i+1, j);
                 left = pressure->index(i, j-1);
                 right = pressure->index(i, j+1);
 
-                pressure->index(i, j) = (1-omega)*pressure->index(i, j) + omega*(up+down+left+right-divergence_center)/4;
+                pressure->index(i, j) = (1-omega)*pressure->index(i, j) + omega*(div-up-down-left-right)/(-4);
             }
         }
 
@@ -107,8 +105,8 @@ void gradient_and_subtract(Field<VECTOR_T> *velocity, const Field<SCALAR_T> *pre
             left = pressure->index(i, j-1);
             right = pressure->index(i, j+1);
 
-            velocity->index(i, j).x -= (right-left)/2;
-            velocity->index(i, j).y -= (up-down)/2;
+            velocity->index(i, j).x -= (down-up)/2;
+            velocity->index(i, j).y -= (right-left)/2;
         }
     }
 

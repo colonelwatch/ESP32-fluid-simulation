@@ -59,7 +59,7 @@ int main(){
         // Apply a force in the center of the velocity field for a little time
         if(i < 0.1/DT){
             const int center_i = N_ROWS/2, center_j = N_COLS/2;
-            FloatVector dv = FloatVector({0, 10});
+            FloatVector dv = FloatVector({-10, 0});
             velocity_field.index(center_i, center_j) += dv;
             velocity_field.index(center_i+1, center_j) += dv;
             velocity_field.index(center_i, center_j+1) += dv;
