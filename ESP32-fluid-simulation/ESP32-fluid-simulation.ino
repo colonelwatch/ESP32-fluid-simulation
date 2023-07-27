@@ -45,8 +45,8 @@ SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary(), // read preceded by
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)}; // we'll use the two tiles for double-buffering
 uint16_t *tile_buffers[2] = {
-    (uint16_t*)tiles[0].createSprite(TILE_HEIGHT, TILE_WIDTH), 
-    (uint16_t*)tiles[1].createSprite(TILE_HEIGHT, TILE_WIDTH)};
+    (uint16_t*)tiles[0].createSprite(TILE_WIDTH, TILE_HEIGHT),
+    (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
 const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
 const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
 
@@ -63,6 +63,7 @@ struct stats global_stats;
 
 
 void touch_routine(void *args){
+  ts.setRotation(1); // landscape rotation
   ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   ts.begin(ts_spi);
 
@@ -77,13 +78,16 @@ void touch_routine(void *args){
     if(touched){
       last_coords = current_coords; // current_coords is now history
       
-      // the output follows the x-y scheme, but my coords and velocities are in 
-      //  the i-j scheme. To convert, we'll swap x and y, and then flip the y
+      // getPoint() follows the coordinate system defined by Adafruit, but my 
+      //  coordinates and velocities use the "ij" indexing that is typical for 
+      //  row-major C arrays
+      // Fortunately, the Adafruit coordinate system is just a rename of the 
+      //  "ij" indexing, where x is j and y is i
       // furthermore, we'll map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
       current_coords = (Vector<uint16_t>){
-          .x = (uint16_t)((4096-raw_coords.y) * N_ROWS / 4096), // convert to the i-coordinate
-          .y = (uint16_t)(raw_coords.x * N_COLS / 4096)};       // convert to the j-coordinate
+          .x = (uint16_t)(raw_coords.y * N_ROWS / 4096),  // TODO: don't use a uint16_t Vector because it's confusing.
+          .y = (uint16_t)(raw_coords.x * N_COLS / 4096)}; //        this reads like a transpose when its not.
     }
     // else current_coords should never end up being used
 
@@ -243,6 +247,9 @@ void sim_routine(void* args){
 
 
 void draw_routine(void* args){
+  // TFT_eSPI uses the (again) Adafruit coordinate system, but our colors 
+  //  fields are in "ij". x is j and y is i. width is M and height is N.
+  tft.setRotation(1); // landscape rotation
   tft.init();
   tft.fillScreen(TFT_BLACK);
   tft.initDMA();
@@ -271,12 +278,14 @@ void draw_routine(void* args){
             if(g < 0) g = 0; else if(g > 255) g = 255;
             if(b < 0) b = 0; else if(b > 255) b = 255;
             
+            // keeping in mind that i is y and j is x, drawing the rectangle onto a tile
             int i_local = i_cell*SCALING-i_start, j_local = j_cell*SCALING-j_start;
-            tiles[buffer_select].fillRect(i_local, j_local, SCALING, SCALING, tft.color565(r, g, b));
+            tiles[buffer_select].fillRect(j_local, i_local, SCALING, SCALING, tft.color565(r, g, b));
           }
         }
 
-        tft.pushImageDMA(i_start, j_start, TILE_HEIGHT, TILE_WIDTH, tile_buffers[buffer_select]);
+        // keeping in mind that i is y and j is x, drawing the tile onto the screen
+        tft.pushImageDMA(j_start, i_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
         buffer_select = buffer_select? 0 : 1;
       }
     }
