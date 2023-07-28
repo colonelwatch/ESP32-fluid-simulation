@@ -68,11 +68,11 @@ void touch_routine(void *args){
   ts.begin(ts_spi);
 
   Vector<uint16_t> last_coords, current_coords; // used for calculating the velocity
-  bool dragging = false; int n_fails = 0; // n_fails \in {0, 1, ..., 4}, together form the state of the "dragging" FSM
+  bool last_touched = false, touched; // used for detecting when to send a touch struct
   
   while(1){
     // invoke the tirqTouched and touched routines to check if the screen is touched
-    bool touched = ts.tirqTouched() && ts.touched();
+    touched = ts.tirqTouched() && ts.touched();
 
     // get the touch coordinates if we're supposed to
     if(touched){
@@ -91,31 +91,10 @@ void touch_routine(void *args){
     }
     // else current_coords should never end up being used
 
-    // "Dragging" FSM for deciding when to send a touch struct (velocity and location)
-    bool send_touch = false;
-    if(!dragging){ // n_fails is a don't-care here
-      if(touched){
-        send_touch = false; // we need two points for velocity, but this is only the first
-        dragging = true; n_fails = 0; // update state
-      }
-      else{
-        send_touch = false; // obviously
-        // state doesn't change
-      }
-    }
-    else if(dragging && n_fails < 3){
-      if(touched){
-        send_touch = true; // we have two points for velocity, so send the touch struct
-        // state doesn't change here
-      }
-      else{
-        // update state (only flip back to not dragging if we've failed 3 times)
-        n_fails++;
-        if(n_fails == 3)
-          dragging = false;
-      }
-    }
-    // dragging && n_fails >= 3 should never happen
+    // we're supposed to send a touch struct only if we have a previous touch 
+    //  to calculate velocity with, or else the velocity is undefined
+    bool send_touch = touched && last_touched;
+    last_touched = touched; // update memory
 
     // send the touch struct if we're supposed to
     if(send_touch){
