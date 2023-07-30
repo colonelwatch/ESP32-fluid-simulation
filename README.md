@@ -11,6 +11,8 @@ That said, it only runs at 12fps, and it isn't what I originally wanted to make:
 
 ## Running
 
+⚠️ **Disclaimer!** ⚠️ This project crashes when compiled with the latest ESP32 Arduino core (see issue #1). As of writing, that is v2.0.11. Downgrade to v2.0.9 through the Arduino library boards manager before compiling.
+
 This project is built in Arduino, and the only dependencies are [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) (this requires a custom `User_Setup.h` first, see the monorepo for one working example) and [XPT2046_Touchscreen](https://github.com/PaulStoffregen/XPT2046_Touchscreen). Vendors for the CYD can be found through the monorepo. There is also code that will run the same fluid simulation on a PC. Navigate to the repo directory then call:
 
 ```
