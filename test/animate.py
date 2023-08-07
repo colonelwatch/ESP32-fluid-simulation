@@ -6,8 +6,7 @@ import matplotlib.animation as animation
 with open('sim_params.json', 'r') as f:
     sim_params = json.load(f)
 
-N_COLS = sim_params['N_COLS']
-N_ROWS = sim_params['N_ROWS']
+N = sim_params['N']
 DT = sim_params['DT']
 SECONDS = sim_params['SECONDS']
 FRAMERATE = sim_params['OUTPUT_FPS']
@@ -63,7 +62,7 @@ ax2.set_title('Color')
 ax3.set_title('Absolute Divergence (Bad!)')
 
 artists = []
-foo = np.random.random(size=(64, 64))
+foo = np.random.random(size=(N, N))
 artists.append(ax1.quiver(foo, foo, scale=100, scale_units='inches', color='blue'))
 artists.append(ax1.imshow(foo, cmap='hot', interpolation='nearest', vmin=-2, vmax=2, animated=True))
 artists.append(ax2.imshow(foo, interpolation='nearest', vmin=0, vmax=1, animated=True))

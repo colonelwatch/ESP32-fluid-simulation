@@ -8,8 +8,7 @@
 #include "../ESP32-fluid-simulation/Field.h"
 #include "../ESP32-fluid-simulation/operations.h"
 
-#define N_ROWS 64
-#define N_COLS 64
+#define N 64 // width and height of the simulation
 #define SECONDS 10
 #define DT 0.001
 #define OUTPUT_FPS 60
@@ -18,27 +17,27 @@ typedef Vector<float> FloatVector;
 
 int main(){
     // Initialize the color field
-    int center_i = N_ROWS/2, center_j = N_COLS/2;
-    float color_arr[N_ROWS][N_COLS];
-    for(int i = 0; i < N_ROWS; i++){
-        for(int j = 0; j < N_COLS; j++){
+    int center_i = N/2, center_j = N/2;
+    float color_arr[N][N];
+    for(int i = 0; i < N; i++){
+        for(int j = 0; j < N; j++){
             float distance = sqrt(pow(i-center_i, 2) + pow(j-center_j, 2));
             if(distance < 8) color_arr[i][j] = 1;
             else color_arr[i][j] = 0;
         }
     }
-    Field<float> color_field(N_ROWS, N_COLS, CLONE);
+    Field<float> color_field(N, N, CLONE);
     color_field = (float*)color_arr;
 
     // Initialize the velocity field
-    FloatVector zero_arr[N_ROWS][N_COLS] = {0};
-    Field<FloatVector> velocity_field(N_ROWS, N_COLS, NEGATIVE);
+    FloatVector zero_arr[N][N] = {0};
+    Field<FloatVector> velocity_field(N, N, NEGATIVE);
     velocity_field = (FloatVector*)zero_arr;
 
     // Declare the other fields
-    Field<FloatVector> temp_vector_field(N_ROWS, N_COLS, NEGATIVE);
-    Field<float> temp_scalar_field(N_ROWS, N_COLS, CLONE);
-    Field<float> pressure_field(N_ROWS, N_COLS, CLONE);
+    Field<FloatVector> temp_vector_field(N, N, NEGATIVE);
+    Field<float> temp_scalar_field(N, N, CLONE);
+    Field<float> pressure_field(N, N, CLONE);
 
     #ifndef NO_FILE_OUTPUT
     // Open files for output
@@ -58,7 +57,7 @@ int main(){
 
         // Apply a force in the center of the velocity field for a little time
         if(i < 0.1/DT){
-            const int center_i = N_ROWS/2, center_j = N_COLS/2;
+            const int center_i = N/2, center_j = N/2;
             FloatVector dv = FloatVector({-10, 0});
             velocity_field.index(center_i, center_j) += dv;
             velocity_field.index(center_i+1, center_j) += dv;
@@ -101,8 +100,7 @@ int main(){
 
     std::ofstream sim_params("sim_params.json");
     sim_params << "{\n";
-    sim_params << "    \"N_ROWS\": " << N_ROWS << ",\n";
-    sim_params << "    \"N_COLS\": " << N_COLS << ",\n";
+    sim_params << "    \"N\": " << N << ",\n";
     sim_params << "    \"SECONDS\": " << SECONDS << ",\n";
     sim_params << "    \"DT\": " << DT << ",\n";
     sim_params << "    \"OUTPUT_FPS\": " << OUTPUT_FPS << "\n";
