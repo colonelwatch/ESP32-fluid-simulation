@@ -69,8 +69,10 @@ artists.append(ax2.imshow(foo, interpolation='nearest', vmin=0, vmax=1, animated
 artists.append(ax3.imshow(foo, cmap='hot', interpolation='nearest', vmin=0, vmax=1, animated=True))
 
 def update(i):
-    u = velocity_frames[i, :, :, 0]
-    v = velocity_frames[i, :, :, 1]
+    # convert from i-j to ordinary Cartesian (x-y)
+    u = velocity_frames[i, :, :, 1]
+    v = -velocity_frames[i, :, :, 0]
+
     pressure_frame = pressure_frames[i, :, :]
     color_frame = color_frames[i, :, :]
     divergence_frame = divergence_frames[i, :, :]
