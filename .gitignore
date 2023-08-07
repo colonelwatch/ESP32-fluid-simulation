@@ -1,9 +1,10 @@
 .vscode
 build
 a.exe
-color.txt
-divergence.txt
-pressure.txt
-velocity.txt
+sim_color.txt
+sim_divergence.txt
+sim_pressure.txt
+sim_velocity.txt
+sim_params.json
 gmon.out
 a.out

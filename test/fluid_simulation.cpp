@@ -42,10 +42,10 @@ int main(){
 
     #ifndef NO_FILE_OUTPUT
     // Open files for output
-    std::ofstream velocity_file("velocity.txt"), 
-                  pressure_file("pressure.txt"), 
-                  divergence_file("divergence.txt"),
-                  color_file("color.txt");
+    std::ofstream velocity_file("sim_velocity.txt"), 
+                  pressure_file("sim_pressure.txt"), 
+                  divergence_file("sim_divergence.txt"),
+                  color_file("sim_color.txt");
     #endif
     
     const int total_timesteps = SECONDS/DT;
@@ -98,6 +98,16 @@ int main(){
     pressure_file.close();
     divergence_file.close();
     color_file.close();
+
+    std::ofstream sim_params("sim_params.json");
+    sim_params << "{\n";
+    sim_params << "    \"N_ROWS\": " << N_ROWS << ",\n";
+    sim_params << "    \"N_COLS\": " << N_COLS << ",\n";
+    sim_params << "    \"SECONDS\": " << SECONDS << ",\n";
+    sim_params << "    \"DT\": " << DT << ",\n";
+    sim_params << "    \"OUTPUT_FPS\": " << OUTPUT_FPS << "\n";
+    sim_params << "}";
+    sim_params.close();
     #endif
 
     std::cout << "Simulation done!" << std::endl;

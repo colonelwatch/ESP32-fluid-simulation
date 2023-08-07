@@ -1,11 +1,16 @@
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-DT = 0.01
-FRAMERATE = 60
-N_ROWS = 64
-SECONDS = 10
+with open('sim_params.json', 'r') as f:
+    sim_params = json.load(f)
+
+N_COLS = sim_params['N_COLS']
+N_ROWS = sim_params['N_ROWS']
+DT = sim_params['DT']
+SECONDS = sim_params['SECONDS']
+FRAMERATE = sim_params['OUTPUT_FPS']
 
 def read_field_file(file_path, type):
     if type != 'scalar' and type != 'vector':
@@ -33,16 +38,16 @@ def read_field_file(file_path, type):
     return frame_arr
 
 def read_velocity():
-    return read_field_file('velocity.txt', 'vector')
+    return read_field_file('sim_velocity.txt', 'vector')
 def read_pressure():
-    return read_field_file('pressure.txt', 'scalar')
+    return read_field_file('sim_pressure.txt', 'scalar')
 def read_divergence(absolute = True):
-    divergence = read_field_file('divergence.txt', 'scalar')
+    divergence = read_field_file('sim_divergence.txt', 'scalar')
     if(absolute):
         divergence = np.abs(divergence)
     return divergence
 def read_color():
-    return read_field_file('color.txt', 'scalar')
+    return read_field_file('sim_color.txt', 'scalar')
 
 velocity_frames = read_velocity()
 pressure_frames = read_pressure()
