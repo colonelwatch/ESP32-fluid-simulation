@@ -36,22 +36,10 @@ def read_field_file(file_path, type):
 
     return frame_arr
 
-def read_velocity():
-    return read_field_file('sim_velocity.txt', 'vector')
-def read_pressure():
-    return read_field_file('sim_pressure.txt', 'scalar')
-def read_divergence(absolute = True):
-    divergence = read_field_file('sim_divergence.txt', 'scalar')
-    if(absolute):
-        divergence = np.abs(divergence)
-    return divergence
-def read_color():
-    return read_field_file('sim_color.txt', 'scalar')
-
-velocity_frames = read_velocity()
-pressure_frames = read_pressure()
-color_frames = read_color()
-divergence_frames = read_divergence()
+velocity_frames = read_field_file('sim_velocity.txt', 'vector')
+pressure_frames = read_field_file('sim_pressure.txt', 'scalar')
+color_frames = read_field_file('sim_color.txt', 'scalar')
+divergence_frames = np.abs(read_field_file('sim_divergence.txt', 'scalar'))
 
 frame_interval = 1000//FRAMERATE
 frame_count = velocity_frames.shape[0]
