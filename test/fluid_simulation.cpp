@@ -42,7 +42,6 @@ int main(){
     #ifndef NO_FILE_OUTPUT
     // Open files for output
     std::ofstream velocity_file("sim_velocity.txt"), 
-                  pressure_file("sim_pressure.txt"), 
                   divergence_file("sim_divergence.txt"),
                   color_file("sim_color.txt");
     #endif
@@ -79,7 +78,6 @@ int main(){
         if(i % timesteps_per_frame == 0){
             // Output velocity and pressure fields
             velocity_file << velocity_field.toString(2) << "\n\n";
-            pressure_file << pressure_field.toString(2) << "\n\n";
 
             // Calculate and output the divergence of the velocity field
             divergence(&temp_scalar_field, &velocity_field);
@@ -94,7 +92,6 @@ int main(){
     #ifndef NO_FILE_OUTPUT
     // Close the files
     velocity_file.close();
-    pressure_file.close();
     divergence_file.close();
     color_file.close();
 
