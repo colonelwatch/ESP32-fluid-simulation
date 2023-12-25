@@ -11,9 +11,9 @@ template<class T>
 T billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22)
 {
     T x1, x2, interpolated;
-    x1 = p11*(1-dj)+p12*dj; // interp between upper-left and upper-right
-    x2 = p21*(1-dj)+p22*dj; // interp between lower-left and lower-right
-    interpolated = x1*(1-di)+x2*di; // interp between upper and lower
+    x1 = p11*(1-dj)+p12*dj; // interp between lower-left and upper-left
+    x2 = p21*(1-dj)+p22*dj; // interp between lower-right and upper-right
+    interpolated = x1*(1-di)+x2*di; // interp between left and right
     return interpolated;
 }
 
@@ -52,11 +52,11 @@ void divergence(Field<SCALAR_T> *del_dot_velocity, const Field<VECTOR_T> *veloci
     
     for(int i = 0; i < N_i; i++){
         for(int j = 0; j < N_j; j++){
-            SCALAR_T upflow, downflow, leftflow, rightflow;
-            upflow = -velocity->index(i-1, j).x;
-            downflow = velocity->index(i+1, j).x;
-            leftflow = -velocity->index(i, j-1).y;
-            rightflow = velocity->index(i, j+1).y;
+            SCALAR_T leftflow, rightflow, downflow, upflow;
+            leftflow = -velocity->index(i-1, j).x;
+            rightflow = velocity->index(i+1, j).x;
+            downflow = -velocity->index(i, j-1).y;
+            upflow = velocity->index(i, j+1).y;
 
             del_dot_velocity->index(i, j) = (upflow+downflow+leftflow+rightflow)/2;
         }
@@ -79,13 +79,13 @@ void sor_pressure(Field<SCALAR_T> *pressure, const Field<SCALAR_T> *divergence, 
         for(int i = 0; i < N_i; i++){
             for(int j = 0; j < N_j; j++){
                 SCALAR_T div = divergence->index(i, j);
-                SCALAR_T up, down, left, right;
-                up = pressure->index(i-1, j);
-                down = pressure->index(i+1, j);
-                left = pressure->index(i, j-1);
-                right = pressure->index(i, j+1);
+                SCALAR_T left, right, down, up;
+                left = pressure->index(i-1, j);
+                right = pressure->index(i+1, j);
+                down = pressure->index(i, j-1);
+                up = pressure->index(i, j+1);
 
-                pressure->index(i, j) = (1-omega)*pressure->index(i, j) + omega*(div-up-down-left-right)/(-4);
+                pressure->index(i, j) = (1-omega)*pressure->index(i, j) + omega*(div-left-right-down-up)/(-4);
             }
         }
 
@@ -99,14 +99,14 @@ void gradient_and_subtract(Field<VECTOR_T> *velocity, const Field<SCALAR_T> *pre
     
     for(int i = 0; i < N_i; i++){
         for(int j = 0; j < N_j; j++){
-            SCALAR_T up, down, left, right;
-            up = pressure->index(i-1, j);
-            down = pressure->index(i+1, j);
-            left = pressure->index(i, j-1);
-            right = pressure->index(i, j+1);
+            SCALAR_T left, right, down, up;
+            left = pressure->index(i-1, j);
+            right = pressure->index(i+1, j);
+            down = pressure->index(i, j-1);
+            up = pressure->index(i, j+1);
 
-            velocity->index(i, j).x -= (down-up)/2;
-            velocity->index(i, j).y -= (right-left)/2;
+            velocity->index(i, j).x -= (right-left)/2;
+            velocity->index(i, j).y -= (up-down)/2;
         }
     }
 
