@@ -242,7 +242,7 @@ void sim_routine(void* args){
 
 void draw_routine(void* args){
   // As mentioned earlier, the simulation operates on a rotated view of the 
-  //  screen, so draw_routine also needs to rotate it back.
+  //  screen, so draw_routine needs to account for that
   tft.setRotation(1); // landscape rotation
   tft.init();
   tft.fillScreen(TFT_BLACK);
@@ -254,32 +254,31 @@ void draw_routine(void* args){
 
     tft.startWrite(); // start a single transfer for all the tiles
 
-    for(int ii = 0; ii < N_TILES; ii++){
-      for(int jj = 0; jj < M_TILES; jj++){
-        int i_start = ii*TILE_HEIGHT, j_start = jj*TILE_WIDTH,
-            i_end = (ii+1)*TILE_HEIGHT, j_end = (jj+1)*TILE_WIDTH;
-        int i_cell_start = i_start/SCALING, j_cell_start = j_start/SCALING,
-            i_cell_end = i_end/SCALING, j_cell_end = j_end/SCALING;
+    for(int xx = 0; xx < M_TILES; xx++){
+      int x_start = xx*TILE_WIDTH, x_end = (xx+1)*TILE_WIDTH;
+      for(int yy = 0; yy < N_TILES; yy++){
+        int y_start = yy*TILE_HEIGHT, y_end = (yy+1)*TILE_HEIGHT;
 
-        for(int i_cell = i_cell_start; i_cell < i_cell_end; i_cell++){
-          for(int j_cell = j_cell_start; j_cell < j_cell_end; j_cell++){
-            int r = red_field->index(N_ROWS - i_cell - 1, j_cell)*255,
-                g = green_field->index(N_ROWS - i_cell - 1, j_cell)*255,
-                b = blue_field->index(N_ROWS - i_cell - 1, j_cell)*255;
+        int x_cell_start = x_start/SCALING, x_cell_end = x_end/SCALING;
+        for(int x_cell = x_cell_start; x_cell < x_cell_end; x_cell++){
+          int y_cell_start = y_start/SCALING, y_cell_end = y_end/SCALING;
+          for(int y_cell = y_cell_start; y_cell < y_cell_end; y_cell++){
+            // see above about the coordinate transform
+            int r = red_field->index(N_ROWS - y_cell - 1, x_cell)*255,
+                g = green_field->index(N_ROWS - y_cell - 1, x_cell)*255,
+                b = blue_field->index(N_ROWS - y_cell - 1, x_cell)*255;
             
             // don't go out of bounds
             if(r < 0) r = 0; else if(r > 255) r = 255;
             if(g < 0) g = 0; else if(g > 255) g = 255;
             if(b < 0) b = 0; else if(b > 255) b = 255;
             
-            // TODO: how the reversing is done is clear, but how the axis swap 
-            //  is done isn't clear
-            int i_local = i_cell*SCALING-i_start, j_local = j_cell*SCALING-j_start;
-            tiles[buffer_select].fillRect(j_local, i_local, SCALING, SCALING, tft.color565(r, g, b));
+            int y_local = y_cell*SCALING-y_start, x_local = x_cell*SCALING-x_start;
+            tiles[buffer_select].fillRect(x_local, y_local, SCALING, SCALING, tft.color565(r, g, b));
           }
         }
 
-        tft.pushImageDMA(j_start, i_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
+        tft.pushImageDMA(x_start, y_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
         buffer_select = buffer_select? 0 : 1;
       }
     }
