@@ -268,11 +268,6 @@ void draw_routine(void* args){
                 g = green_field->index(N_ROWS - y_cell - 1, x_cell)*255,
                 b = blue_field->index(N_ROWS - y_cell - 1, x_cell)*255;
             
-            // don't go out of bounds
-            if(r < 0) r = 0; else if(r > 255) r = 255;
-            if(g < 0) g = 0; else if(g > 255) g = 255;
-            if(b < 0) b = 0; else if(b > 255) b = 255;
-            
             int y_local = y_cell*SCALING-y_start, x_local = x_cell*SCALING-x_start;
             tiles[buffer_select].fillRect(x_local, y_local, SCALING, SCALING, tft.color565(r, g, b));
           }

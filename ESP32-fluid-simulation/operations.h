@@ -4,6 +4,8 @@
 #include "Vector.h"
 #include "Field.h"
 
+#define FLOOR(x) ( x < 0 ? int(x)-1 : int(x) )
+
 // The below operations assume that the input and output have the same shape
 // SCALAR_T and VECTOR_T are self-evident template args, but T means here that either a scalar or vector can be used
 
@@ -32,7 +34,7 @@ void semilagrangian_advect(Field<T> *new_property, const Field<T> *property, con
             if(source.y > N_j-0.5f) source.y = N_j-0.5f;
 
             // Get the source value with billinear interpolation
-            int i11 = int(source.x), j11 = int(source.y), 
+            int i11 = FLOOR(source.x), j11 = FLOOR(source.y), 
                 i12 = i11, j12 = j11+1, 
                 i21 = i11+1, j21 = j11, 
                 i22 = i11+1, j22 = j11+1;
