@@ -78,16 +78,11 @@ void touch_routine(void *args){
     if(touched){
       last_coords = current_coords; // current_coords is now history
       
-      // getPoint() follows the coordinate system defined by Adafruit, but my 
-      //  coordinates and velocities use the "ij" indexing that is typical for 
-      //  row-major C arrays
-      // Fortunately, the Adafruit coordinate system is just a rename of the 
-      //  "ij" indexing, where x is j and y is i
-      // furthermore, we'll map from a 4096x4096 domain to a N_ROWSxN_COLS one
+      // We need to map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
       current_coords = (Vector<uint16_t>){
-          .x = (uint16_t)(raw_coords.y * N_ROWS / 4096),  // TODO: don't use a uint16_t Vector because it's confusing.
-          .y = (uint16_t)(raw_coords.x * N_COLS / 4096)}; //        this reads like a transpose when its not.
+          .x = (uint16_t)(raw_coords.x * N_COLS / 4096),
+          .y = (uint16_t)(raw_coords.y * N_ROWS / 4096)};
     }
     // else current_coords should never end up being used
 
@@ -100,8 +95,8 @@ void touch_routine(void *args){
     if(send_touch){
       // calculate and send the velocity and location
       Vector<float> current_velocity = {
-          .x = ((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD,  // i-direction
-          .y = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD}; // j-direction
+          .x = ((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD,
+          .y = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD};
       struct touch current_touch = { .coords = current_coords, .velocity = current_velocity };
       xQueueSend(touch_queue, &current_touch, 0); // TODO: don't just use send and pray
     }
@@ -130,10 +125,30 @@ void sim_routine(void* args){
     local_stats.point_timestamps[1] = millis();
 
 
-    // apply the captured drag (encoded as a sequence of touch structs) to the velocity field
+    // Apply the captured drag (encoded as a sequence of touch structs) to the 
+    //  velocity field
+    // However, the yielded .coords and .velocity follows the coodinate system 
+    //  defined in AdafruitGFX, which is just a rename of "ij"-indexing. Their 
+    //  "x" is j, and their "y" is i. On the other hand, the simulation 
+    //  uses a Cartesian grid where x is i and y is j.
+    //
+    //              Cartesian                AdafruitGFX                        
+    //            Λ     y i.e. j         ─┼───>   j i.e. "x"
+    //            │                       │
+    //           ─┼───> x i.e. i          V       i i.e. "y"
+    //
+    // The correct transform between them:
+    //  ("x", "y") --[reverse "y"]--> ("x", -"y") --[swap axes]--> (-"y", "x") 
+    //  --[shift origin]--> (N_ROWS-"y"-1, "x") --["x" is j, "y" is i]--> 
+    //  (N_ROWS-i-1, j)
+    // Notice that this is just a 90-deg clockwise rotation, meaning the 
+    //  simulation internally operates on a *rotated* view of the screen, even 
+    //  if memory passed into it is *not* actually rotated.
     struct touch current_touch;
-    while(xQueueReceive(touch_queue, &current_touch, 0) == pdTRUE) // empty the queue
-      velocity_field->index(current_touch.coords.x, current_touch.coords.y) = current_touch.velocity;
+    while(xQueueReceive(touch_queue, &current_touch, 0) == pdTRUE){ // empty the queue
+      velocity_field->index(N_ROWS - current_touch.coords.y - 1, current_touch.coords.x) = {
+          .x = -current_touch.velocity.y, .y = current_touch.velocity.x};
+    }
     velocity_field->update_boundary(); // in case the dragging went near the boundary, we need to update it
 
 
@@ -226,8 +241,8 @@ void sim_routine(void* args){
 
 
 void draw_routine(void* args){
-  // TFT_eSPI uses the (again) Adafruit coordinate system, but our colors 
-  //  fields are in "ij". x is j and y is i. width is M and height is N.
+  // As mentioned earlier, the simulation operates on a rotated view of the 
+  //  screen, so draw_routine also needs to rotate it back.
   tft.setRotation(1); // landscape rotation
   tft.init();
   tft.fillScreen(TFT_BLACK);
@@ -248,22 +263,22 @@ void draw_routine(void* args){
 
         for(int i_cell = i_cell_start; i_cell < i_cell_end; i_cell++){
           for(int j_cell = j_cell_start; j_cell < j_cell_end; j_cell++){
-            int r = red_field->index(i_cell, j_cell)*255,
-                g = green_field->index(i_cell, j_cell)*255,
-                b = blue_field->index(i_cell, j_cell)*255;
+            int r = red_field->index(N_ROWS - i_cell - 1, j_cell)*255,
+                g = green_field->index(N_ROWS - i_cell - 1, j_cell)*255,
+                b = blue_field->index(N_ROWS - i_cell - 1, j_cell)*255;
             
             // don't go out of bounds
             if(r < 0) r = 0; else if(r > 255) r = 255;
             if(g < 0) g = 0; else if(g > 255) g = 255;
             if(b < 0) b = 0; else if(b > 255) b = 255;
             
-            // keeping in mind that i is y and j is x, drawing the rectangle onto a tile
+            // TODO: how the reversing is done is clear, but how the axis swap 
+            //  is done isn't clear
             int i_local = i_cell*SCALING-i_start, j_local = j_cell*SCALING-j_start;
             tiles[buffer_select].fillRect(j_local, i_local, SCALING, SCALING, tft.color565(r, g, b));
           }
         }
 
-        // keeping in mind that i is y and j is x, drawing the tile onto the screen
         tft.pushImageDMA(j_start, i_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
         buffer_select = buffer_select? 0 : 1;
       }
