@@ -71,8 +71,8 @@ void touch_routine(void *args){
   bool last_touched = false, touched; // used for detecting when to send a touch struct
   
   while(1){
-    // invoke the tirqTouched and touched routines to check if the screen is touched
-    touched = ts.tirqTouched() && ts.touched();
+    // call ts.touched() and store it's result
+    touched = ts.touched();
 
     // get the touch coordinates if we're supposed to
     if(touched){
