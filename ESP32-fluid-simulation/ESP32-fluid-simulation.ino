@@ -130,24 +130,22 @@ void sim_routine(void* args){
     // However, the yielded .coords and .velocity follows the coodinate system 
     //  defined in AdafruitGFX, which is just a rename of "ij"-indexing. Their 
     //  "x" is j, and their "y" is i. On the other hand, the simulation 
-    //  uses a Cartesian grid where x is i and y is j.
+    //  uses a Cartesian grid where x is i and y is j, in other words "xy"-
+    //  indexing
     //
     //              Cartesian                AdafruitGFX                        
     //            Λ     y i.e. j         ─┼───>   j i.e. "x"
     //            │                       │
     //           ─┼───> x i.e. i          V       i i.e. "y"
     //
-    // The correct transform between them:
-    //  ("x", "y") --[reverse "y"]--> ("x", -"y") --[swap axes]--> (-"y", "x") 
-    //  --[shift origin]--> (N_ROWS-"y"-1, "x") --["x" is j, "y" is i]--> 
-    //  (N_ROWS-i-1, j)
-    // Notice that this is just a 90-deg clockwise rotation, meaning the 
-    //  simulation internally operates on a *rotated* view of the screen, even 
-    //  if memory passed into it is *not* actually rotated.
+    // However, if we take the simulation domain to be *rotated about i=0, j=0* 
+    //  relative to the actual domain, then the correct transform of the i and 
+    //  j from the screen to the simulation is *to do nothing*. In terms of x, 
+    //  "x", y, and "y" though, we swap them.
     struct touch current_touch;
     while(xQueueReceive(touch_queue, &current_touch, 0) == pdTRUE){ // empty the queue
-      velocity_field->index(N_ROWS - current_touch.coords.y - 1, current_touch.coords.x) = {
-          .x = -current_touch.velocity.y, .y = current_touch.velocity.x};
+      velocity_field->index(current_touch.coords.y, current_touch.coords.x) = {
+          .x = current_touch.velocity.y, .y = current_touch.velocity.x};
     }
     velocity_field->update_boundary(); // in case the dragging went near the boundary, we need to update it
 
@@ -267,9 +265,9 @@ void draw_routine(void* args){
           int y_cell_start = y_start/SCALING, y_cell_end = y_end/SCALING;
           for(int y_cell = y_cell_start; y_cell < y_cell_end; y_cell++){
             // see above about the coordinate transform
-            int r = red_field->index(N_ROWS - y_cell - 1, x_cell)*255,
-                g = green_field->index(N_ROWS - y_cell - 1, x_cell)*255,
-                b = blue_field->index(N_ROWS - y_cell - 1, x_cell)*255;
+            int r = red_field->index(y_cell, x_cell)*255,
+                g = green_field->index(y_cell, x_cell)*255,
+                b = blue_field->index(y_cell, x_cell)*255;
             
             int y_local = y_cell*SCALING-y_start, x_local = x_cell*SCALING-x_start;
             tiles[buffer_select].fillRect(x_local, y_local, SCALING, SCALING, tft.color565(r, g, b));
@@ -366,7 +364,11 @@ void setup(void) {
       green_field->index(i, j) = 0;
       blue_field->index(i, j) = 0;
 
-      float angle = atan2(i-center_i, j-center_j);
+      // From ij-indexing of the actual domain...
+      float x = i-center_i, y = j-center_j; // ...to xy-indexing of the rotated domain...
+      float x_rotated = y, y_rotated = -x;  // ...to Cartesian indexing of the actual domain
+      float angle = atan2(y_rotated, x_rotated);
+      
       if((angle >= -PI && angle < -PI/3)) red_field->index(i, j) = 1.0;
       else if(angle >= -PI/3 && angle < PI/3) green_field->index(i, j) = 1.0;
       else blue_field->index(i, j) = 1.0;
