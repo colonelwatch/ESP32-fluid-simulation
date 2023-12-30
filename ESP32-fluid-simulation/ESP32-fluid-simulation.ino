@@ -351,6 +351,7 @@ void setup(void) {
   
   
   // Init the raw fields using rules, then smooth them with the kernel for the final color fields
+
   Serial.println("Initializing color fields...");
   float kernel[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
   red_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
@@ -360,21 +361,16 @@ void setup(void) {
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      red_field->index(i, j) = 0;
-      green_field->index(i, j) = 0;
-      blue_field->index(i, j) = 0;
-
       // From ij-indexing of the actual domain...
       float x = i-center_i, y = j-center_j; // ...to xy-indexing of the rotated domain...
       float x_rotated = y, y_rotated = -x;  // ...to Cartesian indexing of the actual domain
       float angle = atan2(y_rotated, x_rotated);
-      
-      if((angle >= -PI && angle < -PI/3)) red_field->index(i, j) = 1.0;
-      else if(angle >= -PI/3 && angle < PI/3) green_field->index(i, j) = 1.0;
-      else blue_field->index(i, j) = 1.0;
+
+      red_field->index(i, j) = (angle < -PI/3)? 1 : 0;
+      green_field->index(i, j) = (angle >= -PI/3 && angle < PI/3)? 1 : 0;
+      blue_field->index(i, j) = (angle >= PI/3)? 1 : 0;
     }
   }
-
   red_field->update_boundary();
   green_field->update_boundary();
   blue_field->update_boundary();
@@ -402,7 +398,6 @@ void setup(void) {
       blue_field->index(i, j) = smoothed_blue;
     }
   }
-
   red_field->update_boundary();
   green_field->update_boundary();
   blue_field->update_boundary();
