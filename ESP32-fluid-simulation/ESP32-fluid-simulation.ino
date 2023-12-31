@@ -128,10 +128,9 @@ void sim_routine(void* args){
     // Apply the captured drag (encoded as a sequence of touch structs) to the 
     //  velocity field
     // However, the yielded .coords and .velocity follows the coodinate system 
-    //  defined in AdafruitGFX, which is just a rename of "ij"-indexing. Their 
+    //  defined in AdafruitGFX, which is a rename of matrix indexing. Their 
     //  "x" is j, and their "y" is i. On the other hand, the simulation 
-    //  uses a Cartesian grid where x is i and y is j, in other words "xy"-
-    //  indexing
+    //  uses Cartesian indexing where x is i and y is j
     //
     //              Cartesian                AdafruitGFX                        
     //            Λ     y i.e. j         ─┼───>   j i.e. "x"
@@ -361,8 +360,8 @@ void setup(void) {
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      // From ij-indexing of the actual domain...
-      float x = i-center_i, y = j-center_j; // ...to xy-indexing of the rotated domain...
+      // From matrix indexing of the actual domain...
+      float x = i-center_i, y = j-center_j; // ...to Cartesian indexing of the rotated domain...
       float x_rotated = y, y_rotated = -x;  // ...to Cartesian indexing of the actual domain
       float angle = atan2(y_rotated, x_rotated);
 
