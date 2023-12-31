@@ -276,6 +276,7 @@ void draw_routine(void* args){
           }
         }
 
+        // pushImageDMA also spin-waits until the previous transfer is done
         tft.pushImageDMA(x_start, y_start, TILE_WIDTH, TILE_HEIGHT, (uint16_t*)write_tile->getPointer());
 
         TFT_eSprite *temp = write_tile;
