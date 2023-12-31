@@ -44,7 +44,7 @@ SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary(), // read preceded by
     color_produced = xSemaphoreCreateBinary();
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)}; // we'll use the two tiles for double-buffering
-uint16_t *tile_buffers[2] = {
+uint16_t *foo[2] = { // TODO: related to above todo, only used to init memory early
     (uint16_t*)tiles[0].createSprite(TILE_WIDTH, TILE_HEIGHT),
     (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
 const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
@@ -248,6 +248,9 @@ void draw_routine(void* args){
   tft.fillScreen(TFT_BLACK);
   tft.initDMA();
 
+  // pointers to tiles to be used for double-buffering
+  TFT_eSprite *write_tile = &tiles[0], *read_tile = &tiles[1];
+
   while(1){
     xSemaphoreTake(color_produced, portMAX_DELAY);
     int buffer_select = 0;
@@ -269,12 +272,15 @@ void draw_routine(void* args){
                 b = blue_field->index(y_cell, x_cell)*255;
             
             int y_local = y_cell*SCALING-y_start, x_local = x_cell*SCALING-x_start;
-            tiles[buffer_select].fillRect(x_local, y_local, SCALING, SCALING, tft.color565(r, g, b));
+            write_tile->fillRect(x_local, y_local, SCALING, SCALING, tft.color565(r, g, b));
           }
         }
 
-        tft.pushImageDMA(x_start, y_start, TILE_WIDTH, TILE_HEIGHT, tile_buffers[buffer_select]);
-        buffer_select = buffer_select? 0 : 1;
+        tft.pushImageDMA(x_start, y_start, TILE_WIDTH, TILE_HEIGHT, (uint16_t*)write_tile->getPointer());
+
+        TFT_eSprite *temp = write_tile;
+        write_tile = read_tile;
+        read_tile = temp;
       }
     }
 
