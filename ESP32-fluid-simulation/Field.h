@@ -75,11 +75,11 @@ void Field<T>::update_boundary(){
         }
     }
     else{ // this->bc == NEGATIVE
-        // corners
-        this->index(-1, -1) = -this->index(0, 0);
-        this->index(N_i, -1) = -this->index(N_i-1, 0);
-        this->index(-1, N_j) = -this->index(0, N_j-1);
-        this->index(N_i, N_j) = -this->index(N_i-1, N_j-1);
+        // corners (negative of a negative!)
+        this->index(-1, -1) = this->index(0, 0);
+        this->index(N_i, -1) = this->index(N_i-1, 0);
+        this->index(-1, N_j) = this->index(0, N_j-1);
+        this->index(N_i, N_j) = this->index(N_i-1, N_j-1);
         
         // top and bottom sides
         for(int i = 0; i < N_i; i++){
