@@ -30,7 +30,7 @@ const int XPT2046_MOSI = 32;
 const int XPT2046_MISO = 39;
 const int XPT2046_CLK = 25;
 const int XPT2046_CS = 33;
-SPIClass ts_spi = SPIClass(HSPI);
+SPIClass ts_spi = SPIClass(VSPI);
 XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
 
 // essential sim resources
