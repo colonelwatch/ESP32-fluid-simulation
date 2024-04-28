@@ -16,9 +16,6 @@ class Field{
         T& index(int i, int j);
         T index(int i, int j) const;
         void update_boundary(); // Make sure to call this after updating values!
-        
-        Field& operator=(const T *rhs);
-        Field& operator=(const Field &rhs);
 
         char* as_bytes(int *n_bytes, bool include_boundary = true);
     private:
@@ -88,24 +85,6 @@ void Field<T>::update_boundary(){
             this->index(N_i, j) = -this->index(N_i-1, j);
         }
     }
-}
-
-template<class T>
-Field<T>& Field<T>::operator=(const T *rhs){
-    for(int i = 0; i < this->N_i; i++)
-        for(int j = 0; j < this->N_j; j++)
-            this->index(i, j) = rhs[i*this->N_j+j];
-    this->update_boundary();
-    return *this;
-}
-
-template<class T>
-Field<T>& Field<T>::operator=(const Field &rhs){
-    for(int i = 0; i < this->N_i; i++)
-        for(int j = 0; j < this->N_j; j++)
-            this->index(i, j) = rhs.index(i, j);
-    this->update_boundary();
-    return *this;
 }
 
 template<class T>

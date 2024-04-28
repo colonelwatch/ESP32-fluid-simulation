@@ -13,31 +13,32 @@
 #define DT 0.001
 #define OUTPUT_FPS 60
 
-typedef Vector<float> FloatVector;
+#define SWAP(x, y) do { auto temp = x; x = y; y = temp; } while(0);
 
 int main(){
     // Initialize the color field
+    Field<float> *color_field = new Field<float>(N, N, CLONE);
     int center_i = N/2, center_j = N/2;
-    float color_arr[N][N];
     for(int i = 0; i < N; i++){
         for(int j = 0; j < N; j++){
             float distance = sqrt(pow(i-center_i, 2) + pow(j-center_j, 2));
-            if(distance < 8) color_arr[i][j] = 1;
-            else color_arr[i][j] = 0;
+            if(distance < 8) color_field->index(i, j) = 1;
+            else color_field->index(i, j) = 0;
         }
     }
-    Field<float> color_field(N, N, CLONE);
-    color_field = (float*)color_arr;
+    color_field->update_boundary();
 
-    // Initialize the velocity field
-    FloatVector zero_arr[N][N] = {0};
-    Field<FloatVector> velocity_field(N, N, NEGATIVE);
-    velocity_field = (FloatVector*)zero_arr;
+    // Initialize the velocity field and declare a temporary vector field
+    Field<Vector<float>> *velocity_field = new Field<Vector<float>>(N, N, NEGATIVE),
+                         *temp_vector_field = new Field<Vector<float>>(N, N, NEGATIVE);
+    for(int i = 0; i < N; i++)
+        for(int j = 0; j < N; j++)
+            velocity_field->index(i, j) = {0, 0};
+    velocity_field->update_boundary();
 
-    // Declare the other fields
-    Field<FloatVector> temp_vector_field(N, N, NEGATIVE);
-    Field<float> temp_scalar_field(N, N, CLONE);
-    Field<float> pressure_field(N, N, CLONE);
+    // Declare the pressure field and a temporary scalar field
+    Field<float> *pressure_field = new Field<float>(N, N, CLONE),
+                 *temp_scalar_field = new Field<float>(N, N, CLONE);
 
     #ifndef NO_FILE_OUTPUT
     // Open files for output
@@ -51,28 +52,28 @@ int main(){
 
     for(int i = 0; i < total_timesteps; i++){
         // Advect the velocity field
-        semilagrangian_advect(&temp_vector_field, &velocity_field, &velocity_field, DT);
-        velocity_field = temp_vector_field;
+        semilagrangian_advect(temp_vector_field, velocity_field, velocity_field, DT);
+        SWAP(temp_vector_field, velocity_field);
 
         // Apply a force in the center of the velocity field for a little time
         if(i < 0.1/DT){
             const int center_i = N/2, center_j = N/2;
-            FloatVector dv = FloatVector({-10, 0});
-            velocity_field.index(center_i, center_j) += dv;
-            velocity_field.index(center_i+1, center_j) += dv;
-            velocity_field.index(center_i, center_j+1) += dv;
-            velocity_field.index(center_i+1, center_j+1) += dv;
+            Vector<float> dv = Vector<float>({-10, 0});
+            velocity_field->index(center_i, center_j) += dv;
+            velocity_field->index(center_i+1, center_j) += dv;
+            velocity_field->index(center_i, center_j+1) += dv;
+            velocity_field->index(center_i+1, center_j+1) += dv;
         }
 
         // Zero out the divergence of the velocity field
         const float sor_omega = 1.90; // 1.0 reverts SOR to Gauss-Seidel, but 2/(1+sin(pi/60)) = 1.90 is optimal?
-        divergence(&temp_scalar_field, &velocity_field);
-        sor_pressure(&pressure_field, &temp_scalar_field, 10, sor_omega);
-        gradient_and_subtract(&velocity_field, &pressure_field);
+        divergence(temp_scalar_field, velocity_field);
+        sor_pressure(pressure_field, temp_scalar_field, 10, sor_omega);
+        gradient_and_subtract(velocity_field, pressure_field);
 
         // Advect the color field
-        semilagrangian_advect(&temp_scalar_field, &color_field, &velocity_field, DT);
-        color_field = temp_scalar_field;
+        semilagrangian_advect(temp_scalar_field, color_field, velocity_field, DT);
+        SWAP(color_field, temp_scalar_field);
 
         #ifndef NO_FILE_OUTPUT
         if(i % timesteps_per_frame == 0){
@@ -80,18 +81,18 @@ int main(){
             char *bytes;
 
             // Output the velocity field
-            bytes = velocity_field.as_bytes(&n_bytes);
+            bytes = velocity_field->as_bytes(&n_bytes);
             velocity_file.write(bytes, n_bytes);
             delete[] bytes;
 
             // Calculate and output the divergence of the velocity field
-            divergence(&temp_scalar_field, &velocity_field);
-            bytes = temp_scalar_field.as_bytes(&n_bytes);
+            divergence(temp_scalar_field, velocity_field);
+            bytes = temp_scalar_field->as_bytes(&n_bytes);
             divergence_file.write(bytes, n_bytes);
             delete[] bytes;
 
             // Output the color field
-            bytes = color_field.as_bytes(&n_bytes);
+            bytes = color_field->as_bytes(&n_bytes);
             color_file.write(bytes, n_bytes);
             delete[] bytes;
         }
