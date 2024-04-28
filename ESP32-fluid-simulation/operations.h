@@ -4,7 +4,7 @@
 #include "Vector.h"
 #include "Field.h"
 
-#define FLOOR(x) ( x < 0 ? int(x)-1 : int(x) )
+#define FLOOR(x) ( x > 0 || x == int(x) ? int(x) : int(x)-1 )
 
 // The below operations assume that the input and output have the same shape
 // SCALAR_T and VECTOR_T are self-evident template args, but T means here that either a scalar or vector can be used
