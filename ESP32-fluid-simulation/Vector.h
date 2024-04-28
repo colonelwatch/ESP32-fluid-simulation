@@ -46,10 +46,4 @@ class Vector{
 template<typename T>
 inline Vector<T> operator*(const float &lhs, const Vector<T> &rhs){ return rhs*lhs; }
 
-template<typename T>
-std::ostream& operator<<(std::ostream &os, const Vector<T> &rhs){
-    os << '(' << rhs.x << ',' << rhs.y << ')';
-    return os;
-}
-
 #endif

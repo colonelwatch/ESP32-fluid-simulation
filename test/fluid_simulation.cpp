@@ -41,9 +41,9 @@ int main(){
 
     #ifndef NO_FILE_OUTPUT
     // Open files for output
-    std::ofstream velocity_file("sim_velocity.txt"), 
-                  divergence_file("sim_divergence.txt"),
-                  color_file("sim_color.txt");
+    std::ofstream velocity_file("sim_velocity.arr", std::ios::out | std::ios::binary), 
+                  divergence_file("sim_divergence.arr", std::ios::out | std::ios::binary), 
+                  color_file("sim_color.arr", std::ios::out | std::ios::binary);
     #endif
     
     const int total_timesteps = SECONDS/DT;
@@ -76,15 +76,24 @@ int main(){
 
         #ifndef NO_FILE_OUTPUT
         if(i % timesteps_per_frame == 0){
-            // Output velocity and pressure fields
-            velocity_file << velocity_field.toString(2) << "\n\n";
+            int n_bytes;
+            char *bytes;
+
+            // Output the velocity field
+            bytes = velocity_field.as_bytes(&n_bytes);
+            velocity_file.write(bytes, n_bytes);
+            delete[] bytes;
 
             // Calculate and output the divergence of the velocity field
             divergence(&temp_scalar_field, &velocity_field);
-            divergence_file << temp_scalar_field.toString(2) << "\n\n";
+            bytes = temp_scalar_field.as_bytes(&n_bytes);
+            divergence_file.write(bytes, n_bytes);
+            delete[] bytes;
 
             // Output the color field
-            color_file << color_field.toString(2) << "\n\n";
+            bytes = color_field.as_bytes(&n_bytes);
+            color_file.write(bytes, n_bytes);
+            delete[] bytes;
         }
         #endif
     }

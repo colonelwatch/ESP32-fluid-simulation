@@ -1,9 +1,6 @@
 #ifndef FIELD_H
 #define FIELD_H
 
-#include <sstream>
-#include <iomanip>
-
 enum BoundaryCondition {DONTCARE, CLONE, NEGATIVE};
 
 template<class T>
@@ -23,7 +20,7 @@ class Field{
         Field& operator=(const T *rhs);
         Field& operator=(const Field &rhs);
 
-        std::string toString(int precision = -1, bool inside_only = true) const;
+        char* as_bytes(int *n_bytes, bool include_boundary = true);
     private:
         T *_arr;
         int _inside_elems, _total_elems;
@@ -112,30 +109,33 @@ Field<T>& Field<T>::operator=(const Field &rhs){
 }
 
 template<class T>
-std::string Field<T>::toString(int precision, bool inside_only) const{
-    std::stringstream ss;
-    if(precision != -1){
-        ss << std::fixed << std::setprecision(precision);
-    }
-    if(inside_only){
-        for(int i = 0; i < N_i; i++){
-            for(int j = 0; j < N_j; j++){
-                ss << this->index(i, j);
-                if(j != N_j-1) ss << " ";
-            }
-            if(i != N_i-1) ss << "\n";
-        }
+char* Field<T>::as_bytes(int *n_bytes, bool include_boundary){
+    int i_start, i_end, j_start, j_end;
+    if(include_boundary){
+        *n_bytes = this->_inside_elems*sizeof(T);
+        i_start = 0;
+        i_end = this->N_i;
+        j_start = 0;
+        j_end = this->N_j;
     }
     else{
-        for(int i = -1; i < N_i+1; i++){
-            for(int j = -1; j < N_j+1; j++){
-                ss << this->index(i, j);
-                if(j != N_j) ss << " ";
-            }
-            if(i != N_i) ss << "\n";
+        *n_bytes = this->_total_elems*sizeof(T);
+        i_start = -1;
+        i_end = this->N_i+1;
+        j_start = -1;
+        j_end = this->N_j+1;
+    }
+
+    char *bytes = new char[*n_bytes];
+    T *elem_ptr = reinterpret_cast<T*>(bytes);
+
+    for(int i = i_start; i < i_end; i++){
+        for(int j = j_start; j < j_end; j++){
+            (*elem_ptr++) = this->index(i, j);
         }
     }
-    return ss.str();
+
+    return bytes;
 }
 
 #endif

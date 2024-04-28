@@ -11,36 +11,20 @@ DT = sim_params['DT']
 SECONDS = sim_params['SECONDS']
 FRAMERATE = sim_params['OUTPUT_FPS']
 
-def read_field_file(file_path, type):
-    if type != 'scalar' and type != 'vector':
+def read_field_file(file_path, type_str):
+    if type_str != 'scalar' and type_str != 'vector':
         raise ValueError('type must be scalar or vector')
-
-    file_str = open(file_path, 'r').read()
-    frame_arr = file_str.split('\n\n')
-    frame_arr = [frame for frame in frame_arr if frame]
-    frame_arr = [frame.split('\n') for frame in frame_arr]
-    frame_arr = [[row.split(' ') for row in frame] for frame in frame_arr]
-
-    if type == 'scalar':
-        frame_arr = [[[float(item) for item in row] for row in frame] for frame in frame_arr]
-    elif type == 'vector':
-        def string_to_vector(string):
-            string = string.replace('(', '')
-            string = string.replace(')', '')
-            pair = tuple(string.split(','))
-            pair = (float(pair[0]), float(pair[1]))
-            return pair
-        frame_arr = [[[string_to_vector(item) for item in row] for row in frame] for frame in frame_arr]
-
-    frame_arr = np.array(frame_arr)
+    
+    shape = (-1, N, N, 2) if type_str == 'vector' else (-1, N, N)
+    frame_arr = np.fromfile(file_path, dtype=np.float32).reshape(shape)
 
     return frame_arr
 
-velocity_frames = read_field_file('sim_velocity.txt', 'vector')
-color_frames = read_field_file('sim_color.txt', 'scalar')
+velocity_frames = read_field_file('sim_velocity.arr', 'vector')
+color_frames = read_field_file('sim_color.arr', 'scalar')
 
 # see ESP32-fluid-simulation for how and why percent density error is constructed
-divergence_frames = np.abs(read_field_file('sim_divergence.txt', 'scalar'))
+divergence_frames = np.abs(read_field_file('sim_divergence.arr', 'scalar'))
 pct_rho_err_frames = np.array([100*DT*divergence_frame for divergence_frame in divergence_frames])
 
 frame_interval = 1000//FRAMERATE
