@@ -8,3 +8,4 @@ sim_velocity.txt
 sim_params.json
 gmon.out
 a.out
+venv
