@@ -151,13 +151,12 @@ void sim_routine(void* args){
 
     // Get a divergence-free projection of the velocity field
     // SOR: I found the spectral radius (60x80 grid, dx=dy=1, pure Neumann, 
-    //  ignoring +1 and -1(!?) eigvals) to be 0.9996, therefore omega is 1.96
+    //  ignoring eigvals with mag one) to be 0.9996, therefore omega is 1.96
     // https://en.wikipedia.org/wiki/Successive_over-relaxation#Convergence_Rate
-    const float sor_omega = 1.96;
     Field<float> *divergence_field = new Field<float>(N_ROWS, N_COLS, DONTCARE),
         *pressure_field = new Field<float>(N_ROWS, N_COLS, CLONE);
     divergence(divergence_field, velocity_field);
-    sor_pressure(pressure_field, divergence_field, 10, sor_omega);
+    sor_pressure(pressure_field, divergence_field, 10, 1.96);
     gradient_and_subtract(velocity_field, pressure_field);
     delete divergence_field;
     delete pressure_field;
