@@ -78,20 +78,22 @@ void sor_pressure(Field<SCALAR_T> *pressure, const Field<SCALAR_T> *divergence, 
     pressure->update_boundary();
 
     for(int k = 0; k < iterations; k++){
-        for(int i = 0; i < N_i; i++){
-            for(int j = 0; j < N_j; j++){
-                SCALAR_T div = divergence->index(i, j);
-                SCALAR_T left, right, down, up;
-                left = pressure->index(i-1, j);
-                right = pressure->index(i+1, j);
-                down = pressure->index(i, j-1);
-                up = pressure->index(i, j+1);
+        for(int kk = 0; kk <= 1; kk++){
+            for(int i = 0, j_0 = kk; i < N_i; i++, j_0 ^= 1){
+                for(int j = j_0; j < N_j; j += 2){
+                    SCALAR_T div = divergence->index(i, j);
+                    SCALAR_T left, right, down, up;
+                    left = pressure->index(i-1, j);
+                    right = pressure->index(i+1, j);
+                    down = pressure->index(i, j-1);
+                    up = pressure->index(i, j+1);
 
-                pressure->index(i, j) = (1-omega)*pressure->index(i, j) + omega*(div-left-right-down-up)/(-4);
+                    pressure->index(i, j) = (1-omega)*pressure->index(i, j) + omega*(div-left-right-down-up)/(-4);
+                }
             }
-        }
 
-        pressure->update_boundary();
+            pressure->update_boundary();
+        }
     }
 }
 
