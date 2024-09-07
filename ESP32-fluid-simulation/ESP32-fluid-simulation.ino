@@ -4,9 +4,10 @@
 #include <XPT2046_Touchscreen.h>
 
 #include "iram_float.h"
-#include "Vector.h"
-#include "Field.h"
-#include "operations.h"
+#include "vector.h"
+#include "advect.h"
+#include "finitediff.h"
+#include "poisson.h"
 
 // configurables
 #define N_ROWS 60 // size of sim domain
@@ -14,8 +15,8 @@
 #define SCALING 4 // integer scaling of domain -> screen size is inferred from this
 #define TILE_HEIGHT 60 // multiple of SCALING and a factor of (N_ROWS*SCALING)
 #define TILE_WIDTH 80  // multiple of SCALING and a factor of (N_COLS*SCALING)
-#define DT 1/12.0 // s, size of time step in sim time (should roughly match real FPS)
-#define POLLING_PERIOD 20 // ms, for the touch screen
+#define DT 1/20.0 // s, size of time step in sim time (should roughly match real FPS)
+#define POLLING_PERIOD 10 // ms, for the touch screen
 // #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
 
 
@@ -32,12 +33,11 @@ const int XPT2046_CLK = 25;
 const int XPT2046_CS = 33;
 SPIClass ts_spi = SPIClass(VSPI);
 XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
-
 // essential sim resources
-// TODO: allocation here causes a crash, AND runtime allocation of the 
+// TODO: allocation here causes a crash, AND runtime allocation of the
 //  velocity field AFTER the color fields causes a crash?
-Field<Vector<float>> *velocity_field;
-Field<iram_float_t> *red_field, *green_field, *blue_field;
+Vector<float> *velocity_field;
+iram_float_t *red_field, *green_field, *blue_field;
 
 // draw resources
 SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary(), // read preceded by a write, and vice versa
@@ -51,7 +51,7 @@ const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
 const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
 
 // stats resources
-SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary(), 
+SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary(),
     stats_produced = xSemaphoreCreateBinary();
 struct stats{
   unsigned long point_timestamps[6];
@@ -69,7 +69,7 @@ void touch_routine(void *args){
 
   Vector<uint16_t> last_coords, current_coords; // used for calculating the velocity
   bool last_touched = false, touched; // used for detecting when to send a touch struct
-  
+
   while(1){
     // call ts.touched() and store it's result
     touched = ts.touched();
@@ -77,7 +77,7 @@ void touch_routine(void *args){
     // get the touch coordinates if we're supposed to
     if(touched){
       last_coords = current_coords; // current_coords is now history
-      
+
       // We need to map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
       current_coords = (Vector<uint16_t>){
@@ -86,7 +86,7 @@ void touch_routine(void *args){
     }
     // else current_coords should never end up being used
 
-    // we're supposed to send a touch struct only if we have a previous touch 
+    // we're supposed to send a touch struct only if we have a previous touch
     //  to calculate velocity with, or else the velocity is undefined
     bool send_touch = touched && last_touched;
     last_touched = touched; // update memory
@@ -110,54 +110,51 @@ void sim_routine(void* args){
   // local stats and timing the reporting of those stats
   unsigned long now, last_reported = millis();
   struct stats local_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
-  
+
   while(1){
     local_stats.point_timestamps[0] = millis(); // holds the millis() for when calculating the time step started
-    
 
     // Swap the velocity field with the advected one
-    Field<Vector<float>> *to_delete_vector = velocity_field,
-        *temp_vector_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
-    semilagrangian_advect(temp_vector_field, velocity_field, velocity_field, DT);
+    Vector<float> *to_delete = velocity_field, *temp_vector_field = new Vector<float>[N_ROWS*N_COLS];
+    advect(temp_vector_field, velocity_field, velocity_field, N_ROWS, N_COLS, DT, 1);
     velocity_field = temp_vector_field;
-    delete to_delete_vector;
+    delete to_delete;
 
     local_stats.point_timestamps[1] = millis();
 
 
-    // Apply the captured drag (encoded as a sequence of touch structs) to the 
+    // Apply the captured drag (encoded as a sequence of touch structs) to the
     //  velocity field
-    // However, the yielded .coords and .velocity follows the coodinate system 
-    //  defined in AdafruitGFX, which is a rename of matrix indexing. Their 
-    //  "x" is j, and their "y" is i. On the other hand, the simulation 
+    // However, the yielded .coords and .velocity follows the coodinate system
+    //  defined in AdafruitGFX, which is a rename of matrix indexing. Their
+    //  "x" is j, and their "y" is i. On the other hand, the simulation
     //  uses Cartesian indexing where x is i and y is j
     //
-    //              Cartesian                AdafruitGFX                        
+    //              Cartesian                AdafruitGFX
     //            Λ     y i.e. j         ─┼───>   j i.e. "x"
     //            │                       │
     //           ─┼───> x i.e. i          V       i i.e. "y"
     //
-    // However, if we take the simulation domain to be *rotated about i=0, j=0* 
-    //  relative to the actual domain, then the correct transform of the i and 
-    //  j from the screen to the simulation is *to do nothing*. In terms of x, 
+    // However, if we take the simulation domain to be *rotated about i=0, j=0*
+    //  relative to the actual domain, then the correct transform of the i and
+    //  j from the screen to the simulation is *to do nothing*. In terms of x,
     //  "x", y, and "y" though, we swap them.
     struct touch current_touch;
     while(xQueueReceive(touch_queue, &current_touch, 0) == pdTRUE){ // empty the queue
-      velocity_field->index(current_touch.coords.y, current_touch.coords.x) = {
+      velocity_field[index(current_touch.coords.y, current_touch.coords.x, N_ROWS)] = {
           .x = current_touch.velocity.y, .y = current_touch.velocity.x};
     }
-    velocity_field->update_boundary(); // in case the dragging went near the boundary, we need to update it
 
 
     // Get a divergence-free projection of the velocity field
-    // SOR: I found the spectral radius (60x80 grid, dx=dy=1, pure Neumann, 
+    // SOR: I found the spectral radius (60x80 grid, dx=dy=1, pure Neumann,
     //  ignoring eigvals with mag one) to be 0.9996, therefore omega is 1.96
     // https://en.wikipedia.org/wiki/Successive_over-relaxation#Convergence_Rate
-    Field<float> *divergence_field = new Field<float>(N_ROWS, N_COLS, DONTCARE),
-        *pressure_field = new Field<float>(N_ROWS, N_COLS, CLONE);
-    divergence(divergence_field, velocity_field);
-    sor_pressure(pressure_field, divergence_field, 10, 1.96);
-    gradient_and_subtract(velocity_field, pressure_field);
+    float *divergence_field = new float[N_ROWS*N_COLS],
+        *pressure_field = new float[N_ROWS*N_COLS];
+    divergence(divergence_field, velocity_field, N_ROWS, N_COLS, 1);
+    poisson_solve(pressure_field, divergence_field, N_ROWS, N_COLS, 1, 10, 1.96);
+    subtract_gradient(velocity_field, pressure_field, N_ROWS, N_COLS, 1);
     delete divergence_field;
     delete pressure_field;
 
@@ -170,19 +167,19 @@ void sim_routine(void* args){
 
 
     // Replace the color field with the advected one, but do so by rotating the memory used
-    Field<iram_float_t> *temp, *temp_color_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
-    
-    semilagrangian_advect(temp_color_field, red_field, velocity_field, DT);
+    iram_float_t *temp, *temp_color_field = new iram_float_t[N_ROWS*N_COLS];
+
+    advect(temp_color_field, red_field, velocity_field, N_ROWS, N_COLS, DT, 0);
     temp = red_field;
     red_field = temp_color_field;
     temp_color_field = temp;
 
-    semilagrangian_advect(temp_color_field, green_field, velocity_field, DT);
+    advect(temp_color_field, green_field, velocity_field, N_ROWS, N_COLS, DT, 0);
     temp = green_field;
     green_field = temp_color_field;
     temp_color_field = temp;
 
-    semilagrangian_advect(temp_color_field, blue_field, velocity_field, DT);
+    advect(temp_color_field, blue_field, velocity_field, N_ROWS, N_COLS, DT, 0);
     temp = blue_field;
     blue_field = temp_color_field;
     temp_color_field = temp;
@@ -191,27 +188,27 @@ void sim_routine(void* args){
 
     // Signal that the color field has been written/produced as is ready to be read/consumed
     xSemaphoreGive(color_produced);
-    
+
     local_stats.point_timestamps[4] = millis();
 
 
     #ifdef DIVERGENCE_TRACKING
-    // Assuming density is constant over the domain in the current time (which 
-    //  is only a correct assumption if the divergence is equal to zero for all 
-    //  time because the density is obviously constant over the domain at t=0), 
-    //  I'd think that the Euler equations say that the change in density over 
-    //  time is equal to the divergence of the velocity field times the density 
+    // Assuming density is constant over the domain in the current time (which
+    //  is only a correct assumption if the divergence is equal to zero for all
+    //  time because the density is obviously constant over the domain at t=0),
+    //  I'd think that the Euler equations say that the change in density over
+    //  time is equal to the divergence of the velocity field times the density
     //  because the advection term is therefore zero.
-    // Furthermore, I'd argue that "expected density error in pct" is equal to 
+    // Furthermore, I'd argue that "expected density error in pct" is equal to
     //  the divergence times the time step. This is a thing we can track.
     // TODO: research this and find a source?
     float current_abs_divergence = 0; // "current" -> worst over domain at current time
-    Field<float> *new_divergence_field = new Field<float>(N_ROWS, N_COLS, DONTCARE); // "new" divergence after projection
-    divergence(new_divergence_field, velocity_field);
+    float *new_divergence_field = new float[N_ROWS*N_COLS]; // "new" divergence after projection
+    div(velocity_field, new_divergence_field, N_ROWS, N_COLS, 1);
     for(int i = 0; i < N_ROWS; i++)
       for(int j = 0; j < N_COLS; j++)
-        if(abs(new_divergence_field->index(i, j)) > current_abs_divergence)
-          current_abs_divergence = abs(new_divergence_field->index(i, j));
+        if(abs(new_divergence_field[index(i, j, N_ROWS)]) > current_abs_divergence)
+          current_abs_divergence = abs(new_divergence_field[index(i, j, N_COLS)]);
     local_stats.current_abs_pct_density = 100*current_abs_divergence*DT;
     if(local_stats.current_abs_pct_density > local_stats.max_abs_pct_density)
       local_stats.max_abs_pct_density = local_stats.current_abs_pct_density;
@@ -240,7 +237,7 @@ void sim_routine(void* args){
 
 
 void draw_routine(void* args){
-  // As mentioned earlier, the simulation operates on a rotated view of the 
+  // As mentioned earlier, the simulation operates on a rotated view of the
   //  screen, so draw_routine needs to account for that
   tft.setRotation(1); // landscape rotation
   tft.init();
@@ -266,10 +263,10 @@ void draw_routine(void* args){
           int y_cell_start = y_start/SCALING, y_cell_end = y_end/SCALING;
           for(int y_cell = y_cell_start; y_cell < y_cell_end; y_cell++){
             // see above about the coordinate transform
-            int r = red_field->index(y_cell, x_cell)*255,
-                g = green_field->index(y_cell, x_cell)*255,
-                b = blue_field->index(y_cell, x_cell)*255;
-            
+            int r = red_field[index(y_cell, x_cell, N_ROWS)]*255,
+                g = green_field[index(y_cell, x_cell, N_ROWS)]*255,
+                b = blue_field[index(y_cell, x_cell, N_ROWS)]*255;
+
             int y_local = y_cell*SCALING-y_start, x_local = x_cell*SCALING-x_start;
             write_tile->fillRect(x_local, y_local, SCALING, SCALING, tft.color565(r, g, b));
           }
@@ -348,20 +345,18 @@ void setup(void) {
 
 
   Serial.println("Initializing velocity field...");
-  velocity_field = new Field<Vector<float>>(N_ROWS, N_COLS, NEGATIVE);
+  velocity_field = new Vector<float>[N_COLS*N_ROWS];
   for(int i = 0; i < N_ROWS; i++)
     for(int j = 0; j < N_COLS; j++)
-      velocity_field->index(i, j) = {0, 0};
-  velocity_field->update_boundary();
-  
-  
+      velocity_field[index(i, j, N_ROWS)] = {0, 0};
+
   // Init the raw fields using rules, then smooth them with the kernel for the final color fields
 
   Serial.println("Initializing color fields...");
   float kernel[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
-  red_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
-  green_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
-  blue_field = new Field<iram_float_t>(N_ROWS, N_COLS, CLONE);
+  red_field = new iram_float_t[N_COLS*N_ROWS];
+  green_field = new iram_float_t[N_COLS*N_ROWS];
+  blue_field = new iram_float_t[N_COLS*N_ROWS];
 
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
@@ -371,14 +366,11 @@ void setup(void) {
       float x_rotated = y, y_rotated = -x;  // ...to Cartesian indexing of the actual domain
       float angle = atan2(y_rotated, x_rotated);
 
-      red_field->index(i, j) = (angle < -PI/3)? 1 : 0;
-      green_field->index(i, j) = (angle >= -PI/3 && angle < PI/3)? 1 : 0;
-      blue_field->index(i, j) = (angle >= PI/3)? 1 : 0;
+      red_field[index(i, j, N_ROWS)] = (angle < -PI/3)? 1 : 0;
+      green_field[index(i, j, N_ROWS)] = (angle >= -PI/3 && angle < PI/3)? 1 : 0;
+      blue_field[index(i, j, N_ROWS)] = (angle >= PI/3)? 1 : 0;
     }
   }
-  red_field->update_boundary();
-  green_field->update_boundary();
-  blue_field->update_boundary();
 
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
@@ -391,21 +383,18 @@ void setup(void) {
           // extend the edge of the field by repeating the last row/column
           if(ii > N_ROWS-1) ii = N_ROWS-1;
           if(jj > N_COLS-1) jj = N_COLS-1;
-          
-          smoothed_red += kernel[di][dj]*red_field->index(ii, jj);
-          smoothed_green += kernel[di][dj]*green_field->index(ii, jj);
-          smoothed_blue += kernel[di][dj]*blue_field->index(ii, jj);
+
+          smoothed_red += kernel[di][dj]*red_field[index(ii, jj, N_ROWS)];
+          smoothed_green += kernel[di][dj]*green_field[index(ii, jj, N_ROWS)];
+          smoothed_blue += kernel[di][dj]*blue_field[index(ii, jj, N_ROWS)];
         }
       }
 
-      red_field->index(i, j) = smoothed_red;
-      green_field->index(i, j) = smoothed_green;
-      blue_field->index(i, j) = smoothed_blue;
+      red_field[index(i, j, N_ROWS)] = smoothed_red;
+      green_field[index(i, j, N_ROWS)] = smoothed_green;
+      blue_field[index(i, j, N_ROWS)] = smoothed_blue;
     }
   }
-  red_field->update_boundary();
-  green_field->update_boundary();
-  blue_field->update_boundary();
 
 
   Serial.println("Launching tasks...");
