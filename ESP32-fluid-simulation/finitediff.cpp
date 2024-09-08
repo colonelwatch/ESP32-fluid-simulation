@@ -5,7 +5,7 @@ struct grad_sub_context {
     float two_dx_inv;
 };
 
-static float div_expr_safe(Vector<float> *v, int i, int j, int dim_x, int dim_y,
+static float div_expr_safe(Vector2<float> *v, int i, int j, int dim_x, int dim_y,
         void *ctx)
 {
     float two_dx_inv = *((float*)ctx);
@@ -21,7 +21,7 @@ static float div_expr_safe(Vector<float> *v, int i, int j, int dim_x, int dim_y,
     return flow_sum * two_dx_inv;
 }
 
-static float div_expr_fast(Vector<float> *v, int i, int j, int dim_x, int dim_y,
+static float div_expr_fast(Vector2<float> *v, int i, int j, int dim_x, int dim_y,
         void *ctx)
 {
     float two_dx_inv = *((float*)ctx);
@@ -29,13 +29,13 @@ static float div_expr_fast(Vector<float> *v, int i, int j, int dim_x, int dim_y,
     return flow_sum * two_dx_inv;
 }
 
-void divergence(float *div, Vector<float> *v, int dim_x, int dim_y, float dx) {
+void divergence(float *div, Vector2<float> *v, int dim_x, int dim_y, float dx) {
     float two_dx_inv = 1.0f / (2.0f * dx);
     domain_iter(div_expr_safe, div_expr_fast, div, v, dim_x, dim_y,
         &two_dx_inv);
 }
 
-static Vector<float> grad_sub_expr_safe(Vector<float> *v, int i, int j,
+static Vector2<float> grad_sub_expr_safe(Vector2<float> *v, int i, int j,
         int dim_x, int dim_y, void *ctx)
 {
     struct grad_sub_context *grad_ctx = (struct grad_sub_context*)ctx;
@@ -50,12 +50,12 @@ static Vector<float> grad_sub_expr_safe(Vector<float> *v, int i, int j,
     float p_down = (j > 0) ? *(p-dim_x) : *p;
     float p_up = (j < j_max) ? *(p+dim_x) : *p;
 
-    Vector<float> out = {v->x - (p_right - p_left) * two_dx_inv,
+    Vector2<float> out = {v->x - (p_right - p_left) * two_dx_inv,
         v->y - (p_up - p_down) * two_dx_inv};
     return out;
 }
 
-static Vector<float> grad_sub_expr_fast(Vector<float> *v, int i, int j,
+static Vector2<float> grad_sub_expr_fast(Vector2<float> *v, int i, int j,
         int dim_x, int dim_y, void *ctx)
 {
     struct grad_sub_context *grad_ctx = (struct grad_sub_context*)ctx;
@@ -64,12 +64,12 @@ static Vector<float> grad_sub_expr_fast(Vector<float> *v, int i, int j,
     int ij = index(i, j, dim_x);
     float *p = &grad_ctx->p[ij];
 
-    Vector<float> out = {v->x - (*(p+1) - *(p-1)) * two_dx_inv,
+    Vector2<float> out = {v->x - (*(p+1) - *(p-1)) * two_dx_inv,
         v->y - (*(p+dim_x) - *(p-dim_x)) * two_dx_inv};
     return out;
 }
 
-void subtract_gradient(Vector<float> *v, float *p, int dim_x, int dim_y,
+void subtract_gradient(Vector2<float> *v, float *p, int dim_x, int dim_y,
         float dx)
 {
     struct grad_sub_context pois_ctx = {

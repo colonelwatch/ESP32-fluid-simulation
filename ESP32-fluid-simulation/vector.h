@@ -2,46 +2,46 @@
 #define VECTOR_H
 
 template<typename T>
-class Vector{
+class Vector2{
     public:
         T x;
         T y;
         
-        Vector& operator=(const Vector &rhs){
+        Vector2& operator=(const Vector2 &rhs){
             this->x = rhs.x;
             this->y = rhs.y;
             return *this;
         }
-        Vector& operator+=(const Vector &rhs){
+        Vector2& operator+=(const Vector2 &rhs){
             this->x += rhs.x;
             this->y += rhs.y;
             return *this;
         }
-        Vector& operator-=(const Vector &rhs){
+        Vector2& operator-=(const Vector2 &rhs){
             this->x -= rhs.x;
             this->y -= rhs.y;
             return *this;
         }
-        Vector& operator*=(const float &rhs){
+        Vector2& operator*=(const float &rhs){
             this->x *= rhs;
             this->y *= rhs;
             return *this;
         }
-        Vector& operator/=(const float &rhs){
+        Vector2& operator/=(const float &rhs){
             this->x /= rhs;
             this->y /= rhs;
             return *this;
         }
 
-        Vector operator-() const{ return {-this->x, -this->y}; }
-        Vector operator+(const Vector &rhs) const{ return {this->x+rhs.x, this->y+rhs.y}; }
-        Vector operator-(const Vector &rhs) const{ return {this->x-rhs.x, this->y-rhs.y}; }
-        Vector operator*(const float &rhs) const{ return {this->x*rhs, this->y*rhs}; }
-        Vector operator/(const float &rhs) const{ return {this->x/rhs, this->y/rhs}; }
+        Vector2 operator-() const{ return {-this->x, -this->y}; }
+        Vector2 operator+(const Vector2 &rhs) const{ return {this->x+rhs.x, this->y+rhs.y}; }
+        Vector2 operator-(const Vector2 &rhs) const{ return {this->x-rhs.x, this->y-rhs.y}; }
+        Vector2 operator*(const float &rhs) const{ return {this->x*rhs, this->y*rhs}; }
+        Vector2 operator/(const float &rhs) const{ return {this->x/rhs, this->y/rhs}; }
 };
 
 // Scalar multiplication is commutative, so this fulfills that requirement
 template<typename T>
-inline Vector<T> operator*(const float &lhs, const Vector<T> &rhs){ return rhs*lhs; }
+inline Vector2<T> operator*(const float &lhs, const Vector2<T> &rhs){ return rhs*lhs; }
 
 #endif

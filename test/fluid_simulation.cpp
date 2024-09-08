@@ -4,7 +4,7 @@
 #include <fstream>
 #include <iomanip>
 
-#include "../ESP32-fluid-simulation/Vector.h"
+#include "../ESP32-fluid-simulation/Vector2.h"
 #include "../ESP32-fluid-simulation/Field.h"
 #include "../ESP32-fluid-simulation/operations.h"
 
@@ -29,8 +29,8 @@ int main(){
     color_field->update_boundary();
 
     // Initialize the velocity field and declare a temporary vector field
-    Field<Vector<float>> *velocity_field = new Field<Vector<float>>(N, N, NEGATIVE),
-                         *temp_vector_field = new Field<Vector<float>>(N, N, NEGATIVE);
+    Field<Vector2<float>> *velocity_field = new Field<Vector2<float>>(N, N, NEGATIVE),
+                         *temp_vector_field = new Field<Vector2<float>>(N, N, NEGATIVE);
     for(int i = 0; i < N; i++)
         for(int j = 0; j < N; j++)
             velocity_field->index(i, j) = {0, 0};
@@ -58,7 +58,7 @@ int main(){
         // Apply a force in the center of the velocity field for a little time
         if(i < 0.1/DT){
             const int center_i = N/2, center_j = N/2;
-            Vector<float> dv = Vector<float>({-10, 0});
+            Vector2<float> dv = Vector2<float>({-10, 0});
             velocity_field->index(center_i, center_j) += dv;
             velocity_field->index(center_i+1, center_j) += dv;
             velocity_field->index(center_i, center_j+1) += dv;

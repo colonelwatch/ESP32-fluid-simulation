@@ -22,8 +22,8 @@
 
 // touch resources
 struct touch{
-  Vector<uint16_t> coords;
-  Vector<float> velocity;
+  Vector2<uint16_t> coords;
+  Vector2<float> velocity;
 };
 QueueHandle_t touch_queue = xQueueCreate(10, sizeof(struct touch));
 const int XPT2046_IRQ = 36;
@@ -36,7 +36,7 @@ XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
 // essential sim resources
 // TODO: allocation here causes a crash, AND runtime allocation of the
 //  velocity field AFTER the color fields causes a crash?
-Vector<float> *velocity_field;
+Vector2<float> *velocity_field;
 iram_float_t *red_field, *green_field, *blue_field;
 
 // draw resources
@@ -67,7 +67,7 @@ void touch_routine(void *args){
   ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   ts.begin(ts_spi);
 
-  Vector<uint16_t> last_coords, current_coords; // used for calculating the velocity
+  Vector2<uint16_t> last_coords, current_coords; // used for calculating the velocity
   bool last_touched = false, touched; // used for detecting when to send a touch struct
 
   while(1){
@@ -80,7 +80,7 @@ void touch_routine(void *args){
 
       // We need to map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
-      current_coords = (Vector<uint16_t>){
+      current_coords = (Vector2<uint16_t>){
           .x = (uint16_t)(raw_coords.x * N_COLS / 4096),
           .y = (uint16_t)(raw_coords.y * N_ROWS / 4096)};
     }
@@ -94,7 +94,7 @@ void touch_routine(void *args){
     // send the touch struct if we're supposed to
     if(send_touch){
       // calculate and send the velocity and location
-      Vector<float> current_velocity = {
+      Vector2<float> current_velocity = {
           .x = ((float)current_coords.x - (float)last_coords.x) * 1000 / POLLING_PERIOD,
           .y = ((float)current_coords.y - (float)last_coords.y) * 1000 / POLLING_PERIOD};
       struct touch current_touch = { .coords = current_coords, .velocity = current_velocity };
@@ -115,7 +115,7 @@ void sim_routine(void* args){
     local_stats.point_timestamps[0] = millis(); // holds the millis() for when calculating the time step started
 
     // Swap the velocity field with the advected one
-    Vector<float> *to_delete = velocity_field, *temp_vector_field = new Vector<float>[N_ROWS*N_COLS];
+    Vector2<float> *to_delete = velocity_field, *temp_vector_field = new Vector2<float>[N_ROWS*N_COLS];
     advect(temp_vector_field, velocity_field, velocity_field, N_ROWS, N_COLS, DT, 1);
     velocity_field = temp_vector_field;
     delete to_delete;
@@ -345,7 +345,7 @@ void setup(void) {
 
 
   Serial.println("Initializing velocity field...");
-  velocity_field = new Vector<float>[N_COLS*N_ROWS];
+  velocity_field = new Vector2<float>[N_COLS*N_ROWS];
   for(int i = 0; i < N_ROWS; i++)
     for(int j = 0; j < N_COLS; j++)
       velocity_field[index(i, j, N_ROWS)] = {0, 0};

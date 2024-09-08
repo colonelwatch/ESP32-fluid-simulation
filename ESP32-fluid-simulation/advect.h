@@ -97,14 +97,14 @@ static T sample(T *p, float i, float j, int dim_x, int dim_y, int no_slip) {
 }
 
 template <class T, class U>
-void advect(T *next_p, T *p, Vector<U> *vel, int dim_x, int dim_y, float dt,
+void advect(T *next_p, T *p, Vector2<U> *vel, int dim_x, int dim_y, float dt,
         int no_slip)
 {
     for (int i = 0; i < dim_x; i++) {
         for (int j = 0; j < dim_y; j++) {
             int ij = index(i, j, dim_x);
-            Vector<U> vel_ij = vel[ij];
-            Vector<U> source = {i-vel_ij.x*dt, j-vel_ij.y*dt};
+            Vector2<U> vel_ij = vel[ij];
+            Vector2<U> source = {i-vel_ij.x*dt, j-vel_ij.y*dt};
             next_p[ij] = sample(p, source.x, source.y, dim_x, dim_y, no_slip);
         }
     }
