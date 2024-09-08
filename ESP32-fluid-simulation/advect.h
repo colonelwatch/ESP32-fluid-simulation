@@ -9,12 +9,12 @@ static inline int floor(int x) {
 }
 
 template <class T>
-static inline T lerp(float di, T p1, T p2) {
+static inline TPromoted<T> lerp(float di, T p1, T p2) {
     return p1 * (1 - di) + p2 * di;
 }
 
 template <class T>
-static T billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22) {
+static TPromoted<T> billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22) {
     return lerp(di, lerp(dj, p11, p12), lerp(dj, p21, p22));
 }
 
