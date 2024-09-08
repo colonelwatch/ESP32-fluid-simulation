@@ -3,11 +3,11 @@
 #include <TFT_eSPI.h> // WARNING: before uploading, acquire custom User_Setup.h (see monorepo)
 #include <XPT2046_Touchscreen.h>
 
-#include "iram_float.h"
 #include "vector.h"
 #include "advect.h"
 #include "finitediff.h"
 #include "poisson.h"
+#include "uq16.h"
 
 // configurables
 #define N_ROWS 60 // size of sim domain
@@ -37,7 +37,7 @@ XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
 // TODO: allocation here causes a crash, AND runtime allocation of the
 //  velocity field AFTER the color fields causes a crash?
 Vector2<float> *velocity_field;
-iram_float_t *red_field, *green_field, *blue_field;
+Vector3<UQ16> *color_field;
 
 // draw resources
 SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary(), // read preceded by a write, and vice versa
@@ -167,24 +167,11 @@ void sim_routine(void* args){
 
 
     // Replace the color field with the advected one, but do so by rotating the memory used
-    iram_float_t *temp, *temp_color_field = new iram_float_t[N_ROWS*N_COLS];
-
-    advect(temp_color_field, red_field, velocity_field, N_ROWS, N_COLS, DT, 0);
-    temp = red_field;
-    red_field = temp_color_field;
-    temp_color_field = temp;
-
-    advect(temp_color_field, green_field, velocity_field, N_ROWS, N_COLS, DT, 0);
-    temp = green_field;
-    green_field = temp_color_field;
-    temp_color_field = temp;
-
-    advect(temp_color_field, blue_field, velocity_field, N_ROWS, N_COLS, DT, 0);
-    temp = blue_field;
-    blue_field = temp_color_field;
-    temp_color_field = temp;
-
-    delete temp_color_field; // drop the memory that got rotated out
+    Vector3<UQ16> *temp = color_field;
+    Vector3<UQ16> *next_color_field = new Vector3<UQ16>[N_ROWS*N_COLS];
+    advect(next_color_field, color_field, velocity_field, N_ROWS, N_COLS, DT, 0);
+    color_field = next_color_field;
+    delete temp;
 
     // Signal that the color field has been written/produced as is ready to be read/consumed
     xSemaphoreGive(color_produced);
@@ -263,12 +250,11 @@ void draw_routine(void* args){
           int y_cell_start = y_start/SCALING, y_cell_end = y_end/SCALING;
           for(int y_cell = y_cell_start; y_cell < y_cell_end; y_cell++){
             // see above about the coordinate transform
-            int r = red_field[index(y_cell, x_cell, N_ROWS)]*255,
-                g = green_field[index(y_cell, x_cell, N_ROWS)]*255,
-                b = blue_field[index(y_cell, x_cell, N_ROWS)]*255;
-
+            Vector3<UQ16> color = color_field[index(y_cell, x_cell, N_ROWS)];
+            uint16_t color_565 = ((color.x.raw & 0xF800) |
+              ((color.y.raw & 0xFC00) >> 5) | ((color.z.raw & 0xF800) >> 11));
             int y_local = y_cell*SCALING-y_start, x_local = x_cell*SCALING-x_start;
-            write_tile->fillRect(x_local, y_local, SCALING, SCALING, tft.color565(r, g, b));
+            write_tile->fillRect(x_local, y_local, SCALING, SCALING, color_565);
           }
         }
 
@@ -354,9 +340,7 @@ void setup(void) {
 
   Serial.println("Initializing color fields...");
   float kernel[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
-  red_field = new iram_float_t[N_COLS*N_ROWS];
-  green_field = new iram_float_t[N_COLS*N_ROWS];
-  blue_field = new iram_float_t[N_COLS*N_ROWS];
+  color_field = new Vector3<UQ16>[N_COLS*N_ROWS];
 
   const int center_i = N_ROWS/2, center_j = N_COLS/2;
   for(int i = 0; i < N_ROWS; i++){
@@ -366,15 +350,19 @@ void setup(void) {
       float x_rotated = y, y_rotated = -x;  // ...to Cartesian indexing of the actual domain
       float angle = atan2(y_rotated, x_rotated);
 
-      red_field[index(i, j, N_ROWS)] = (angle < -PI/3)? 1 : 0;
-      green_field[index(i, j, N_ROWS)] = (angle >= -PI/3 && angle < PI/3)? 1 : 0;
-      blue_field[index(i, j, N_ROWS)] = (angle >= PI/3)? 1 : 0;
+      if (angle < -PI/3) {
+        color_field[index(i, j, N_ROWS)] = {65535.0f, 0.0f, 0.0f};
+      } else if (angle >= -PI/3 && angle < PI/3) {
+        color_field[index(i, j, N_ROWS)] = {0.0f, 65535.0f, 0.0f};
+      } else {
+        color_field[index(i, j, N_ROWS)] = {0.0f, 0.0f, 65535.0f};
+      }
     }
   }
 
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      float smoothed_red = 0, smoothed_green = 0, smoothed_blue = 0;
+      Vector3<float> smoothed = {0, 0, 0};
 
       for(int di = 0; di < 3; di++){
         for(int dj = 0; dj < 3; dj++){
@@ -384,15 +372,11 @@ void setup(void) {
           if(ii > N_ROWS-1) ii = N_ROWS-1;
           if(jj > N_COLS-1) jj = N_COLS-1;
 
-          smoothed_red += kernel[di][dj]*red_field[index(ii, jj, N_ROWS)];
-          smoothed_green += kernel[di][dj]*green_field[index(ii, jj, N_ROWS)];
-          smoothed_blue += kernel[di][dj]*blue_field[index(ii, jj, N_ROWS)];
+          smoothed += kernel[di][dj]*color_field[index(ii, jj, N_ROWS)];
         }
       }
 
-      red_field[index(i, j, N_ROWS)] = smoothed_red;
-      green_field[index(i, j, N_ROWS)] = smoothed_green;
-      blue_field[index(i, j, N_ROWS)] = smoothed_blue;
+      color_field[index(i, j, N_ROWS)] = smoothed;
     }
   }
 
