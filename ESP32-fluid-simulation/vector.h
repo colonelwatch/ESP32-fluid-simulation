@@ -4,7 +4,8 @@
 #include <utility>
 #include <initializer_list>
 
-template<typename T> using TPromoted = decltype(std::declval<T>()*std::declval<float>());
+template<typename T>
+using TPromoted = decltype(std::declval<T>()*std::declval<float>());
 
 template<typename T>
 class Vector2{
@@ -13,7 +14,10 @@ class Vector2{
         T y;
 
         Vector2() {};
-        template<typename U> Vector2(Vector2<U> v) : x((T)v.x), y((T)v.y) {}
+
+        template<typename U>
+        Vector2(Vector2<U> v) : x((T)v.x), y((T)v.y) {}
+
         Vector2(std::initializer_list<T> l) {
             const T* ptr = l.begin();
             this->x = *(ptr++);
@@ -73,7 +77,10 @@ class Vector3 {
         T z;
 
         Vector3() {};
-        template<typename U> Vector3(Vector3<U> v) : x((T)v.x), y((T)v.y), z((T)v.z) {}
+
+        template<typename U>
+        Vector3(Vector3<U> v) : x((T)v.x), y((T)v.y), z((T)v.z) {}
+
         Vector3(std::initializer_list<T> l) {
             const T* ptr = l.begin();
             this->x = *(ptr++);
