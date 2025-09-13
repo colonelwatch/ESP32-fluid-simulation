@@ -62,42 +62,36 @@ struct stats{
 struct stats global_stats;
 
 
-void touch_routine(void *args){
+void touch_routine (void *args)
+{
   ts.setRotation(1); // landscape rotation
   ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   ts.begin(ts_spi);
 
-  Vector2<int> last_coords, current_coords; // used for calculating the velocity
-  bool last_touched = false, touched; // used for detecting when to send a touch struct
+  Vector2<int> last_coords;
+  bool last_touched = false;
+  while (true) {
+    bool touched = ts.touched();
 
-  while(1){
-    // call ts.touched() and store it's result
-    touched = ts.touched();
-
-    // get the touch coordinates if we're supposed to
-    if(touched){
-      last_coords = current_coords; // current_coords is now history
-
+    if (touched) {
       // We need to map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
-      current_coords = Vector2<int>(raw_coords.x * N_COLS / 4096,
-                                    raw_coords.y * N_ROWS / 4096);
-    }
-    // else current_coords should never end up being used
+      Vector2<int> coords(raw_coords.x * N_COLS / 4096,
+                          raw_coords.y * N_ROWS / 4096);
 
-    // we're supposed to send a touch struct only if we have a previous touch
-    //  to calculate velocity with, or else the velocity is undefined
-    bool send_touch = touched && last_touched;
-    last_touched = touched; // update memory
+      // only send a touch struct if a velocity can be calculated
+      if (last_touched) {
+        Vector2<int> delta = coords - last_coords;
+        Vector2<float> velocity = delta * 1000.f / POLLING_PERIOD;
+        struct touch current_touch = { .coords = coords, .velocity = velocity };
+        xQueueSend(touch_queue, &current_touch, 0);
+      }
 
-    // send the touch struct if we're supposed to
-    if(send_touch){
-      // calculate and send the velocity and location
-      Vector2<int> delta = current_coords - last_coords;
-      Vector2<float> current_velocity = delta * 1000.f / POLLING_PERIOD;
-      struct touch current_touch = { .coords = current_coords, .velocity = current_velocity };
-      xQueueSend(touch_queue, &current_touch, 0); // TODO: don't just use send and pray
+      last_coords = coords;
     }
+    // else last_coords is now stale
+
+    last_touched = touched;
 
     vTaskDelay(POLLING_PERIOD / portTICK_PERIOD_MS);
   }
