@@ -1,4 +1,5 @@
 #include "poisson.h"
+#include "operations.h"
 
 struct pois_context {
     float *d;

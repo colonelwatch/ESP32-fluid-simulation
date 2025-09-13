@@ -1,4 +1,5 @@
 #include "finitediff.h"
+#include "operations.h"
 
 struct grad_sub_context {
     float *p;

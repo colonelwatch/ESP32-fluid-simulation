@@ -2,7 +2,6 @@
 #define FINITE_DIFF_H
 
 #include "vector.h"
-#include "operations.h"
 
 void divergence(float *div, Vector2<float> *v, int dim_x, int dim_y, float dx);
 
