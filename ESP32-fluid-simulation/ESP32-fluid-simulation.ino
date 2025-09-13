@@ -80,9 +80,8 @@ void touch_routine(void *args){
 
       // We need to map from a 4096x4096 domain to a N_ROWSxN_COLS one
       TS_Point raw_coords = ts.getPoint();
-      current_coords = (Vector2<int>){
-          .x = raw_coords.x * N_COLS / 4096,
-          .y = raw_coords.y * N_ROWS / 4096};
+      current_coords = Vector2<int>(raw_coords.x * N_COLS / 4096,
+                                    raw_coords.y * N_ROWS / 4096);
     }
     // else current_coords should never end up being used
 
@@ -94,9 +93,8 @@ void touch_routine(void *args){
     // send the touch struct if we're supposed to
     if(send_touch){
       // calculate and send the velocity and location
-      Vector2<float> current_velocity = {
-          .x = (current_coords.x - last_coords.x) * 1000.f / POLLING_PERIOD,
-          .y = (current_coords.y - last_coords.y) * 1000.f / POLLING_PERIOD};
+      Vector2<int> delta = current_coords - last_coords;
+      Vector2<float> current_velocity = delta * 1000.f / POLLING_PERIOD;
       struct touch current_touch = { .coords = current_coords, .velocity = current_velocity };
       xQueueSend(touch_queue, &current_touch, 0); // TODO: don't just use send and pray
     }
