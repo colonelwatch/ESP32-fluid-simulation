@@ -1,12 +1,10 @@
 #ifndef ADVECT_H
 #define ADVECT_H
 
+#include <cmath>
+
 #include "vector.h"
 #include "operations.h"
-
-static inline int floor(int x) {
-    return x > 0 || x == int(x) ? int(x) : int(x) - 1;
-}
 
 template <class T>
 static inline TPromoted<T> lerp(float di, T p1, T p2) {
@@ -50,7 +48,7 @@ static T sample(T *p, float i, float j, int dim_x, int dim_y, int no_slip) {
         j = -0.5f;
     }
 
-    int i_floor = floor(i), j_floor = floor(j);
+    int i_floor = floorf(i), j_floor = floorf(j);
     float di = i - i_floor, dj = j - j_floor;
     int ij = index(i_floor, j_floor, dim_x);
 
