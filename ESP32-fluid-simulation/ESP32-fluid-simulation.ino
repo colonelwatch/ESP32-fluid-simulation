@@ -317,7 +317,7 @@ void setup(void) {
   velocity_field = new Vector2<float>[N_COLS*N_ROWS];
   for(int i = 0; i < N_ROWS; i++)
     for(int j = 0; j < N_COLS; j++)
-      velocity_field[index(i, j, N_ROWS)] = {0, 0};
+      velocity_field[index(i, j, N_ROWS)] = Vector2<float>(0, 0);
 
   // Init the raw fields using rules, then smooth them with the kernel for the final color fields
 
@@ -334,18 +334,18 @@ void setup(void) {
       float angle = atan2(y_rotated, x_rotated);
 
       if (angle < -PI/3) {
-        color_field[index(i, j, N_ROWS)] = {65535.0f, 0.0f, 0.0f};
+        color_field[index(i, j, N_ROWS)] = Vector3<float>(65535, 0, 0);
       } else if (angle >= -PI/3 && angle < PI/3) {
-        color_field[index(i, j, N_ROWS)] = {0.0f, 65535.0f, 0.0f};
+        color_field[index(i, j, N_ROWS)] = Vector3<float>(0, 65535, 0);
       } else {
-        color_field[index(i, j, N_ROWS)] = {0.0f, 0.0f, 65535.0f};
+        color_field[index(i, j, N_ROWS)] = Vector3<float>(0, 0, 65535);
       }
     }
   }
 
   for(int i = 0; i < N_ROWS; i++){
     for(int j = 0; j < N_COLS; j++){
-      Vector3<float> smoothed = {0, 0, 0};
+      Vector3<float> smoothed(0, 0, 0);
 
       for(int di = 0; di < 3; di++){
         for(int dj = 0; dj < 3; dj++){

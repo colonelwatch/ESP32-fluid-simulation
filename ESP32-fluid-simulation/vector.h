@@ -1,8 +1,6 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
-#include <initializer_list>
-
 template<typename T>
 class Vector2{
     public:
@@ -16,13 +14,6 @@ class Vector2{
 
         template<typename U>
         Vector2(U v_x, U v_y) : x(v_x), y(v_y) {}
-
-        template<typename U>
-        Vector2(std::initializer_list<U> l) {
-            const U* ptr = l.begin();
-            this->x = *(ptr++);
-            this->y = *(ptr++);
-        }
         
         Vector2& operator=(const Vector2 &rhs){
             this->x = rhs.x;
@@ -83,14 +74,6 @@ class Vector3 {
 
         template<typename U>
         Vector3(U v_x, U v_y, U v_z) : x(v_x), y(v_y), z(v_z) {}
-
-        template<typename U>
-        Vector3(std::initializer_list<U> l) {
-            const U* ptr = l.begin();
-            this->x = *(ptr++);
-            this->y = *(ptr++);
-            this->z = *(ptr++);
-        }
         
         Vector3& operator=(const Vector3 &rhs){
             this->x = rhs.x;
