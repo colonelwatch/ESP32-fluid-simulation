@@ -5,9 +5,6 @@
 #include <initializer_list>
 
 template<typename T>
-using TPromoted = decltype(std::declval<T>()*std::declval<float>());
-
-template<typename T>
 class Vector2{
     public:
         T x;
@@ -61,17 +58,17 @@ class Vector2{
         Vector2 operator-(const Vector2 &rhs) const { 
             return {this->x-rhs.x, this->y-rhs.y};
         }
-        Vector2<TPromoted<T>> operator*(const float &rhs) const {
+        Vector2<float> operator*(const float &rhs) const {
             return {this->x*rhs, this->y*rhs};
         }
-        Vector2<TPromoted<T>> operator/(const float &rhs) const {
+        Vector2<float> operator/(const float &rhs) const {
             return {this->x/rhs, this->y/rhs};
         }
 };
 
 // Scalar multiplication is commutative, so this fulfills that requirement
 template<typename T>
-inline Vector2<TPromoted<T>> operator*(const float &lhs, const Vector2<T> &rhs){ return rhs*lhs; }
+inline Vector2<float> operator*(const float &lhs, const Vector2<T> &rhs){ return rhs*lhs; }
 
 template<typename T>
 class Vector3 {
@@ -134,16 +131,16 @@ class Vector3 {
         Vector3 operator-(const Vector3 &rhs) const{
             return {this->x-rhs.x, this->y-rhs.y, this->z-rhs.z};
         }
-        Vector3<TPromoted<T>> operator*(const float &rhs) const{
+        Vector3<float> operator*(const float &rhs) const{
             return {this->x*rhs, this->y*rhs, this->z*rhs};
         }
-        Vector3<TPromoted<T>> operator/(const float &rhs) const{
+        Vector3<float> operator/(const float &rhs) const{
             return {this->x/rhs, this->y/rhs, this->z/rhs};
         }
 };
 
 // Scalar multiplication is commutative, so this fulfills that requirement
 template<typename T>
-inline Vector3<TPromoted<T>> operator*(const float &lhs, const Vector3<T> &rhs){ return rhs*lhs; }
+inline Vector3<float> operator*(const float &lhs, const Vector3<T> &rhs){ return rhs*lhs; }
 
 #endif

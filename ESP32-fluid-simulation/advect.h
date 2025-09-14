@@ -6,103 +6,78 @@
 #include "vector.h"
 #include "operations.h"
 
+template<typename T>
+using TPromoted = decltype(std::declval<T>()*std::declval<float>());
+
 template <class T>
-static inline TPromoted<T> lerp(float di, T p1, T p2) {
+static TPromoted<T> lerp(float di, T p1, T p2) {
     return p1 * (1 - di) + p2 * di;
 }
 
 template <class T>
-static TPromoted<T> billinear_interpolate(float di, float dj, T p11, T p12, T p21, T p22) {
+static TPromoted<T> billinear_interpolate(float di, float dj, T p11, T p12,
+                                          T p21, T p22) {
     return lerp(di, lerp(dj, p11, p12), lerp(dj, p21, p22));
 }
 
 template <class T>
-static T sample(T *p, float i, float j, int dim_x, int dim_y, int no_slip) {
-    int overshot_in_x = (i >= dim_x-1 || i < 0);
-    int overshot_in_y = (j >= dim_y-1 || j < 0);
+static T sample(T *p, float i, float j, int dim_x, int dim_y, bool no_slip) {
+    bool x_under = i < 0;
+    bool x_over = i >= dim_x - 1;
+    bool y_under = j < 0;
+    bool y_over = j >= dim_y - 1;
 
-    if (!overshot_in_x && !overshot_in_y) {
-        int i_floor = (int)i, j_floor = (int)j;
-        float di = i - i_floor, dj = j - j_floor;
-        int ij = index(i_floor, j_floor, dim_x);
-        return billinear_interpolate(di, dj, p[ij], p[ij + dim_x], p[ij + 1],
-            p[ij + dim_x + 1]);
-    }
+    bool x_oob = x_under || x_over;
+    bool y_oob = y_under || y_over;
 
-    float overshoot_right = i - (dim_x-1), overshoot_left = 0 - i;
-    float overshoot_up = j - (dim_y-1), overshoot_down = 0 - j;
-    if (overshoot_right > 0.5f) {
-        overshoot_right = 0.5f;
-        i = dim_x - 0.5f;
-    }
-    if (overshoot_left > 0.5f) {
-        overshoot_left = 0.5f;
-        i = -0.5f;
-    }
-    if (overshoot_up > 0.5f) {
-        overshoot_up = 0.5f;
-        j = dim_y - 0.5f;
-    }
-    if (overshoot_down > 0.5f) {
-        overshoot_down = 0.5f;
-        j = -0.5f;
-    }
-
-    int i_floor = floorf(i), j_floor = floorf(j);
+    float i_floor = floorf(i), j_floor = floorf(j);
     float di = i - i_floor, dj = j - j_floor;
-    int ij = index(i_floor, j_floor, dim_x);
+    int ij;
 
-    T p_edge;
-    float overshoot_factor;
-    if (overshot_in_x && overshot_in_y) {
-        int offset = 0;
-        if (overshoot_right >= 0) {
-            overshoot_factor = (1 - 2 * overshoot_right);
-        } else { // overshoot_left > 0
-            offset += 1;
-            overshoot_factor = (1 - 2 * overshoot_left);
-        }
-        if (overshoot_up >= 0) {
-            overshoot_factor *= (1 - 2 * overshoot_up);
-        } else { // overshoot_down > 0
-            offset += dim_x;
-            overshoot_factor *= (1 - 2 * overshoot_down);
-        }
-        p_edge = p[ij + offset];
-    } else if (overshot_in_x) {
-        if (overshoot_right >= 0) {
-            p_edge = lerp(dj, p[ij], p[ij + dim_x]);
-            overshoot_factor = 1 - 2 * overshoot_right;
-        } else { // overshoot_left > 0
-            p_edge = lerp(dj, p[ij + 1], p[ij + dim_x + 1]);
-            overshoot_factor = 1 - 2 * overshoot_left;
-        }
-    } else { // overshot_in_y
-        if (overshoot_up >= 0) {
-            p_edge = lerp(di, p[ij], p[ij + 1]);
-            overshoot_factor = 1 - 2 * overshoot_up;
-        } else { // overshoot_down > 0
-            p_edge = lerp(di, p[ij + dim_x], p[ij + dim_x + 1]);
-            overshoot_factor = 1 - 2 * overshoot_down;
-        }
+    if (!x_oob && !y_oob) {   // typical case: not near the boundary
+        ij = index(i_floor, j_floor, dim_x);
+        return billinear_interpolate(di, dj, p[ij], p[ij + dim_x], p[ij + 1],
+                                     p[ij + dim_x + 1]);
     }
 
-    if (no_slip) {
-        return p_edge * overshoot_factor;
-    } else {
+    // interpolate along the boundary
+    T p_edge;
+    if (x_oob && y_oob) {  // on a corner
+        ij = index((x_under? 0 : dim_x - 1), (y_under? 0 : dim_y - 1), dim_x);
+        p_edge = p[ij];
+    } else if (x_oob) {  // on left or right boundary
+        ij = index((x_under? 0 : dim_x - 1), j_floor, dim_x);
+        p_edge = lerp(dj, p[ij], p[ij + dim_x]);
+    } else {  // y_oob, on bottom or top boundary
+        ij = index(i_floor, (y_under? 0 : dim_y - 1), dim_x);
+        p_edge = lerp(di, p[ij], p[ij + 1]);
+    }
+
+    if (!no_slip) {
         return p_edge;
     }
+
+    // apply discount to implement no-slip, with zero at the boundary and beyond
+    float overshoot_factor = 1.0f;
+    if (x_oob) {
+        float overshoot_x = x_under ? -i : i - (dim_x - 1);
+        overshoot_factor *= overshoot_x < 0.5 ? (1 - 2 * overshoot_x) : 0;
+    }
+    if (y_oob) { 
+        float overshoot_y = y_under ? -j : j - (dim_y - 1);
+        overshoot_factor *= overshoot_y < 0.5 ? (1 - 2 * overshoot_y) : 0;
+    }
+    return overshoot_factor * p_edge;
 }
 
 template <class T, class U>
 void advect(T *next_p, T *p, Vector2<U> *vel, int dim_x, int dim_y, float dt,
-        int no_slip)
+            bool no_slip)
 {
     for (int i = 0; i < dim_x; i++) {
         for (int j = 0; j < dim_y; j++) {
             int ij = index(i, j, dim_x);
-            Vector2<U> vel_ij = vel[ij];
-            Vector2<U> source = {i-vel_ij.x*dt, j-vel_ij.y*dt};
+            Vector2<float> source = Vector2<float>(i, j) - vel[ij] * dt;
             next_p[ij] = sample(p, source.x, source.y, dim_x, dim_y, no_slip);
         }
     }

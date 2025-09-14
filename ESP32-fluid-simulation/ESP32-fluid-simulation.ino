@@ -19,6 +19,8 @@
 #define POLLING_PERIOD 10 // ms, for the touch screen
 // #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
 
+#define SWAP(x, y) do { auto temp = x; x = y; y = temp; } while(0)
+
 
 // touch resources
 struct touch{
@@ -107,10 +109,11 @@ void sim_routine(void* args){
     local_stats.point_timestamps[0] = millis(); // holds the millis() for when calculating the time step started
 
     // Swap the velocity field with the advected one
-    Vector2<float> *to_delete = velocity_field, *temp_vector_field = new Vector2<float>[N_ROWS*N_COLS];
-    advect(temp_vector_field, velocity_field, velocity_field, N_ROWS, N_COLS, DT, 1);
-    velocity_field = temp_vector_field;
-    delete to_delete;
+    Vector2<float> *v_temp = new Vector2<float>[N_ROWS*N_COLS];
+    advect(v_temp, velocity_field, velocity_field, N_ROWS, N_COLS,
+           DT, true);
+    SWAP(v_temp, velocity_field);
+    delete v_temp;
 
     local_stats.point_timestamps[1] = millis();
 
