@@ -23,11 +23,11 @@
 
 
 // touch resources
-struct touch{
+struct drag {
   Vector2<uint16_t> coords;
   Vector2<float> velocity;
 };
-QueueHandle_t touch_queue = xQueueCreate(10, sizeof(struct touch));
+QueueHandle_t drag_queue = xQueueCreate(10, sizeof(struct drag));
 const int XPT2046_IRQ = 36;
 const int XPT2046_MOSI = 32;
 const int XPT2046_MISO = 39;
@@ -81,12 +81,12 @@ void touch_routine (void *args)
       Vector2<int> coords(raw_coords.x * N_COLS / 4096,
                           raw_coords.y * N_ROWS / 4096);
 
-      // only send a touch struct if a velocity can be calculated
+      // only send a drag struct if a velocity can be calculated
       if (last_touched) {
         Vector2<int> delta = coords - last_coords;
         Vector2<float> velocity = delta * 1000.f / POLLING_PERIOD;
-        struct touch current_touch = { .coords = coords, .velocity = velocity };
-        xQueueSend(touch_queue, &current_touch, 0);
+        struct drag msg = { .coords = coords, .velocity = velocity };
+        xQueueSend(drag_queue, &msg, 0);
       }
 
       last_coords = coords;
@@ -118,26 +118,17 @@ void sim_routine(void* args){
     local_stats.point_timestamps[1] = millis();
 
 
-    // Apply the captured drag (encoded as a sequence of touch structs) to the
-    //  velocity field
-    // However, the yielded .coords and .velocity follows the coodinate system
-    //  defined in AdafruitGFX, which is a rename of matrix indexing. Their
-    //  "x" is j, and their "y" is i. On the other hand, the simulation
-    //  uses Cartesian indexing where x is i and y is j
-    //
-    //              Cartesian                AdafruitGFX
-    //            Λ     y i.e. j         ─┼───>   j i.e. "x"
-    //            │                       │
-    //           ─┼───> x i.e. i          V       i i.e. "y"
-    //
-    // However, if we take the simulation domain to be *rotated about i=0, j=0*
-    //  relative to the actual domain, then the correct transform of the i and
-    //  j from the screen to the simulation is *to do nothing*. In terms of x,
-    //  "x", y, and "y" though, we swap them.
-    struct touch current_touch;
-    while(xQueueReceive(touch_queue, &current_touch, 0) == pdTRUE){ // empty the queue
-      velocity_field[index(current_touch.coords.y, current_touch.coords.x, N_ROWS)] = {
-          .x = current_touch.velocity.y, .y = current_touch.velocity.x};
+    /* Apply the captured drag. They're defined in the graphics coordinate
+    system, i.e matrix indexing, but the sim uses Cartesian indexing.
+           Λ   y i.e. j  Cartesian     ─┼─> j i.e. "x"  Graphics
+          ─┼─> x i.e. i                 V   i i.e. "y"
+    The response: if the sim domain is rotated 90 deg relative to the actual
+    domain, the transform is just to swap x and y. */
+    struct drag msg;
+    while(xQueueReceive(drag_queue, &msg, 0) == pdTRUE){
+      int ij = index(msg.coords.y, msg.coords.x, N_ROWS);
+      Vector2<float> swapped(msg.velocity.y, msg.velocity.x);
+      velocity_field[ij] = swapped;
     }
 
 
@@ -313,8 +304,8 @@ void stats_routine(void* args){
     Serial.print(", ");
     #endif
 
-    Serial.print("Touch queue sz: ");
-    Serial.print(uxQueueMessagesWaiting(touch_queue));
+    Serial.print("Drag queue sz: ");
+    Serial.print(uxQueueMessagesWaiting(drag_queue));
     Serial.println();
   }
 }
