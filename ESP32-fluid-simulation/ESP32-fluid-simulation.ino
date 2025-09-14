@@ -132,17 +132,14 @@ void sim_routine(void* args){
     }
 
 
-    // Get a divergence-free projection of the velocity field
-    // SOR: I found the spectral radius (60x80 grid, dx=dy=1, pure Neumann,
-    //  ignoring eigvals with mag one) to be 0.9996, therefore omega is 1.96
-    // https://en.wikipedia.org/wiki/Successive_over-relaxation#Convergence_Rate
-    float *divergence_field = new float[N_ROWS*N_COLS],
-        *pressure_field = new float[N_ROWS*N_COLS];
-    divergence(divergence_field, velocity_field, N_ROWS, N_COLS, 1);
-    poisson_solve(pressure_field, divergence_field, N_ROWS, N_COLS, 1, 10, 1.96);
-    subtract_gradient(velocity_field, pressure_field, N_ROWS, N_COLS, 1);
-    delete divergence_field;
-    delete pressure_field;
+    // Get divergence-free velocity (with 1.96 as a found omega for 60x80 grid)
+    float *div_v = new float[N_ROWS * N_COLS];
+    float *p = new float[N_ROWS * N_COLS];
+    calculate_divergence(div_v, velocity_field, N_ROWS, N_COLS, 1);
+    poisson_solve(p, div_v, N_ROWS, N_COLS, 1, 10, 1.96);
+    subtract_gradient(velocity_field, p, N_ROWS, N_COLS, 1);
+    delete div_v;
+    delete p;
 
     local_stats.point_timestamps[2] = millis();
 

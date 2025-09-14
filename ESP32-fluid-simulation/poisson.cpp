@@ -12,9 +12,9 @@ static inline int point_is_red(int i, int j) {
 }
 
 template<class T, class U>
-static void domain_iter_red_black(U (*expr_safe)(T*, int, int, int, int, void*),
-    U (*expr_fast)(T*, int, int, int, int, void*), U *wrt, T *rd, int dim_x,
-    int dim_y, void *ctx)
+static void domain_iter_red_black(kernel_func_t<T, U> expr_safe,
+                                  kernel_func_t<T, U> expr_fast, U *wrt, T *rd,
+                                  int dim_x, int dim_y, void *ctx)
 {
     int i_max = (dim_x)-1, j_max = (dim_y)-1;  // inclusive!
     int ij, offset;

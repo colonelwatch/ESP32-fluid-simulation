@@ -3,9 +3,10 @@
 
 #include "vector.h"
 
-void divergence(float *div, Vector2<float> *v, int dim_x, int dim_y, float dx);
+void calculate_divergence(float *div, Vector2<float> *v, int dim_x, int dim_y,
+                          float dx);
 
 void subtract_gradient(Vector2<float> *v, float *p, int dim_x, int dim_y,
-        float dx);
+                       float dx);
 
 #endif
