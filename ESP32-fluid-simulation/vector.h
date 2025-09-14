@@ -1,7 +1,6 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
-#include <utility>
 #include <initializer_list>
 
 template<typename T>
