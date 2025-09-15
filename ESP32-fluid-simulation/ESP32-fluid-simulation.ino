@@ -113,7 +113,7 @@ void sim_routine(void* args){
     advect(v_temp, velocity_field, velocity_field, N_ROWS, N_COLS,
            DT, true);
     SWAP(v_temp, velocity_field);
-    delete v_temp;
+    delete[] v_temp;
 
     local_stats.point_timestamps[1] = millis();
 
@@ -138,8 +138,8 @@ void sim_routine(void* args){
     calculate_divergence(div_v, velocity_field, N_ROWS, N_COLS, 1);
     poisson_solve(p, div_v, N_ROWS, N_COLS, 1, 10, 1.96);
     subtract_gradient(velocity_field, p, N_ROWS, N_COLS, 1);
-    delete div_v;
-    delete p;
+    delete[] div_v;
+    delete[] p;
 
     local_stats.point_timestamps[2] = millis();
 
@@ -149,12 +149,11 @@ void sim_routine(void* args){
     local_stats.point_timestamps[3] = millis();
 
 
-    // Replace the color field with the advected one, but do so by rotating the memory used
-    Vector3<UQ16> *temp = color_field;
-    Vector3<UQ16> *next_color_field = new Vector3<UQ16>[N_ROWS*N_COLS];
-    advect(next_color_field, color_field, velocity_field, N_ROWS, N_COLS, DT, 0);
-    color_field = next_color_field;
-    delete temp;
+    // Swap the color field with the advected one
+    Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
+    advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
+    SWAP(c_temp, color_field);
+    delete[] c_temp;
 
     // Signal that the color field has been written/produced as is ready to be read/consumed
     xSemaphoreGive(color_produced);
@@ -182,7 +181,7 @@ void sim_routine(void* args){
     local_stats.current_abs_pct_density = 100*current_abs_divergence*DT;
     if(local_stats.current_abs_pct_density > local_stats.max_abs_pct_density)
       local_stats.max_abs_pct_density = local_stats.current_abs_pct_density;
-    delete new_divergence_field;
+    delete[] new_divergence_field;
     #endif
 
     local_stats.point_timestamps[5] = millis();
