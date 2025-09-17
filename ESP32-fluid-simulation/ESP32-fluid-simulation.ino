@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include <SPI.h>
 
 #include <TFT_eSPI.h> // WARNING: before uploading, acquire custom User_Setup.h (see monorepo)
@@ -57,8 +59,8 @@ SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary(),
     stats_produced = xSemaphoreCreateBinary();
 struct stats{
   unsigned long point_timestamps[6];
-  float current_abs_pct_density; // "current" -> worst over domain at current time
-  float max_abs_pct_density; // "max" -> worst over domain and all time
+  float current_error; // "current" -> worst over domain at current time
+  float max_error; // "max" -> worst over domain and all time
   int refresh_count;
 };
 struct stats global_stats;
@@ -103,7 +105,7 @@ void touch_routine (void *args)
 void sim_routine(void* args){
   // local stats and timing the reporting of those stats
   unsigned long now, last_reported = millis();
-  struct stats local_stats = (struct stats){ .max_abs_pct_density = 0, .refresh_count = 0 };
+  struct stats local_stats = (struct stats){ .max_error = 0, .refresh_count = 0 };
 
   while(1){
     local_stats.point_timestamps[0] = millis(); // holds the millis() for when calculating the time step started
@@ -162,26 +164,34 @@ void sim_routine(void* args){
 
 
     #ifdef DIVERGENCE_TRACKING
-    // Assuming density is constant over the domain in the current time (which
-    //  is only a correct assumption if the divergence is equal to zero for all
-    //  time because the density is obviously constant over the domain at t=0),
-    //  I'd think that the Euler equations say that the change in density over
-    //  time is equal to the divergence of the velocity field times the density
-    //  because the advection term is therefore zero.
-    // Furthermore, I'd argue that "expected density error in pct" is equal to
-    //  the divergence times the time step. This is a thing we can track.
-    // TODO: research this and find a source?
-    float current_abs_divergence = 0; // "current" -> worst over domain at current time
-    float *new_divergence_field = new float[N_ROWS*N_COLS]; // "new" divergence after projection
-    div(velocity_field, new_divergence_field, N_ROWS, N_COLS, 1);
-    for(int i = 0; i < N_ROWS; i++)
-      for(int j = 0; j < N_COLS; j++)
-        if(abs(new_divergence_field[index(i, j, N_ROWS)]) > current_abs_divergence)
-          current_abs_divergence = abs(new_divergence_field[index(i, j, N_COLS)]);
-    local_stats.current_abs_pct_density = 100*current_abs_divergence*DT;
-    if(local_stats.current_abs_pct_density > local_stats.max_abs_pct_density)
-      local_stats.max_abs_pct_density = local_stats.current_abs_pct_density;
-    delete[] new_divergence_field;
+    // compute post-projection divergence
+    float *new_div_v = new float[N_ROWS * N_COLS];
+    calculate_divergence(new_div_v, velocity_field, N_ROWS, N_COLS, 1);
+
+    /* The continuity equation is ∂ρ/∂t = ∇ · (ρv). If hypothetically ρ were
+    constant everywhere, it becomes ∂ρ/∂t = ρ * (∇ · v). Therefore, (∇ · v)
+    alone, times a finite Δt, gives a factor by which ρ increases. */
+    int abs_argmax_ij = 0;
+    float abs_max = 0, worst_div_v;
+    for (int i = 0; i < N_ROWS; ++i) {
+      for (int j = 0; j < N_COLS; ++j) {
+        int ij = index(i, j, N_ROWS);
+        float abs_ij = fabsf(new_div_v[ij]);
+        if(abs_ij > abs_max) {
+          abs_max = abs_ij;
+          abs_argmax_ij = ij;
+        }
+      }
+    }
+    worst_div_v = new_div_v[abs_argmax_ij];
+
+    // Update stats tracker
+    local_stats.current_error = 100 * worst_div_v * DT;
+    if(local_stats.current_error > local_stats.max_error) {
+      local_stats.max_error = local_stats.current_error;
+    }
+
+    delete[] new_div_v;
     #endif
 
     local_stats.point_timestamps[5] = millis();
@@ -195,7 +205,7 @@ void sim_routine(void* args){
       global_stats = local_stats;
       xSemaphoreGive(stats_produced);
 
-      // don't reset max_abs_pct_density because it's a running max
+      // don't reset max_error because it's a running max
       last_reported = now;
       local_stats.refresh_count = 0;
     }
@@ -290,12 +300,12 @@ void stats_routine(void* args){
     Serial.print(", ");
 
     #ifdef DIVERGENCE_TRACKING
-    Serial.print("Err now: +/- ");
-    Serial.print(local_stats.current_abs_pct_density, 1);
+    Serial.print("Err now: ");
+    Serial.print(local_stats.current_error, 1);
     Serial.print("%");
     Serial.print(", ");
-    Serial.print("Err max: +/- ");
-    Serial.print(local_stats.max_abs_pct_density, 1);
+    Serial.print("Err max: ");
+    Serial.print(local_stats.max_error, 1);
     Serial.print("%");
     Serial.print(", ");
     #endif
