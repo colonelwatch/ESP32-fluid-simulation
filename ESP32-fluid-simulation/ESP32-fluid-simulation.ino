@@ -146,18 +146,16 @@ void sim_routine(void* args){
     local_stats.point_timestamps[2] = millis();
 
 
-    // Wait for the color field to be read/consumed already, and time this wait
-    xSemaphoreTake(color_consumed, portMAX_DELAY);
+    Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
+    advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
+
     local_stats.point_timestamps[3] = millis();
 
 
     // Swap the color field with the advected one
-    Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
-    advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
+    xSemaphoreTake(color_consumed, portMAX_DELAY);
     SWAP(c_temp, color_field);
     delete[] c_temp;
-
-    // Signal that the color field has been written/produced as is ready to be read/consumed
     xSemaphoreGive(color_produced);
 
     local_stats.point_timestamps[4] = millis();
