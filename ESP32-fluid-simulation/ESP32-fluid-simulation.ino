@@ -220,74 +220,64 @@ void draw_routine(void* args){
   tft.initDMA();
 
   // pointers to tiles to be used for double-buffering
-  // TODO: move to define?
-  const int n = 16;
-  const int n_tiles = n / SCALING;
-  uint16_t *write_tile = new uint16_t[n * SCREEN_WIDTH];
-  uint16_t *read_tile = new uint16_t[n * SCREEN_WIDTH];
+  uint16_t *write_tile = new uint16_t[SCALING * SCREEN_WIDTH];
+  uint16_t *read_tile = new uint16_t[SCALING * SCREEN_WIDTH];
+
+  const float inv_scaling = 1.0f / SCALING;
+  Vector3<UQ16> c1, c2, c3, c4;
+  Vector3<float> dc;
+  Vector3<float> interp[SCALING][SCALING + 1];
 
   while(1){
     xSemaphoreTake(color_produced, portMAX_DELAY);
 
     tft.startWrite(); // start a single transfer for all the tiles
 
-    const float inv_scaling = 1.0f / SCALING;
-    Vector3<float> row[SCALING][SCALING + 1];
-    Vector3<float> dc[SCALING];
-
-    int offset;
     for (int i = 0; i < N_ROWS; i++) {
       for (int j = 0; j < N_COLS; j++) {
-        offset = SCREEN_WIDTH * SCALING * (i % n_tiles) + SCALING * j;
-        
-        Vector3<UQ16> c1, c2, c3, c4;
-        c1 = color_field[index(i, j, N_ROWS)];
-        c2 = j == N_COLS - 1 ? c1 : color_field[index(i, j + 1, N_ROWS)];
-        c3 = i == N_ROWS - 1 ? c1 : color_field[index(i + 1, j, N_ROWS)];
-        // c4 = (j == N_COLS - 1 && i == N_ROWS - 1) ? c1 : color_field[index(i + 1, j + 1, N_ROWS)];
-        if (j == N_COLS - 1 && i == N_ROWS - 1) {
-          c4 = c1;  // eliminate this branch because c3 or c2 is c1 anyway?
-        } else if (j == N_COLS - 1) {
-          c4 = c3;
-        } else if (i == N_ROWS - 1) {
-          c4 = c2;
-        } else {
-          c4 = color_field[index(i + 1, j + 1, N_ROWS)];
-        }
 
-        int ii, jj;
-        float dx, dy;
+        bool is_right_border = (j == N_COLS - 1);
+        bool is_bottom_border = (i == N_ROWS - 1);
+        c1 = color_field[index(i, j, N_ROWS)];
+        c2 = is_right_border ? c1 : color_field[index(i, j + 1, N_ROWS)];
+        c3 = is_bottom_border ? c1 : color_field[index(i + 1, j, N_ROWS)];
+        if (!(is_right_border || is_bottom_border)) {
+          c4 = color_field[index(i + 1, j + 1, N_ROWS)];
+        }else if (is_right_border) {
+          c4 = c3;
+        } else {  // is_bottom_border
+          c4 = c2;
+        }
 
         if (j == 0) {
-          dc[0] = ((Vector3<float>)c3 - (Vector3<float>)c1) * inv_scaling;
-          row[0][0] = c1;
-          for (ii = 1; ii < SCALING; ii++) {
-            row[ii][0] = row[ii - 1][0] + dc[0];
+          dc = ((Vector3<float>)c3 - (Vector3<float>)c1) * inv_scaling;
+          interp[0][0] = c1;
+          for (int ii = 1; ii < SCALING; ii++) {
+            interp[ii][0] = interp[ii - 1][0] + dc;
           }
         } else {
-          for (ii = 0; ii < SCALING; ii++) {
-            row[ii][0] = row[ii][SCALING];
-          }
-        }
-        dc[1] = ((Vector3<float>)c4 - (Vector3<float>)c2) * inv_scaling;
-        row[0][SCALING] = c2;
-        for (ii = 1; ii < SCALING; ii++) {
-          row[ii][SCALING] = row[ii - 1][SCALING] + dc[1];
-        }
-
-        for (ii = 0; ii < SCALING; ii++) {
-          dc[ii] = (row[ii][SCALING] - row[ii][0]) * inv_scaling;
-        }
-
-        for (ii = 0; ii < SCALING; ii++) {
-          for (jj = 1; jj < SCALING; jj++) {
-            row[ii][jj] = row[ii][jj - 1] + dc[ii];
+          for (int ii = 0; ii < SCALING; ii++) {
+            interp[ii][0] = interp[ii][SCALING];
           }
         }
 
-        for (ii = 0; ii < SCALING; ii++) {
-          for (jj = 0; jj < SCALING; jj++) {
-            Vector3<UQ16> color = row[ii][jj];
+        dc = ((Vector3<float>)c4 - (Vector3<float>)c2) * inv_scaling;
+        interp[0][SCALING] = c2;
+        for (int ii = 1; ii < SCALING; ii++) {
+          interp[ii][SCALING] = interp[ii - 1][SCALING] + dc;
+        }
+
+        for (int ii = 0; ii < SCALING; ii++) {
+          dc = (interp[ii][SCALING] - interp[ii][0]) * inv_scaling;
+          for (int jj = 1; jj < SCALING; jj++) {
+            interp[ii][jj] = interp[ii][jj - 1] + dc;
+          }
+        }
+
+        int offset = SCALING * j;
+        for (int ii = 0; ii < SCALING; ii++) {
+          for (int jj = 0; jj < SCALING; jj++) {
+            Vector3<UQ16> color = interp[ii][jj];
             uint16_t color_565;
             color_565 = ((color.x.raw & 0xF800) |
                          ((color.y.raw & 0xFC00) >> 5) |
@@ -298,14 +288,11 @@ void draw_routine(void* args){
         }
       }
 
-      if ((i + 1) % n_tiles == 0) {
-        while (tft.dmaBusy()) {
-          vTaskDelay(0);
-          // vTaskDelay(1);
-        }
-        tft.pushImageDMA(0, ((i + 1) - n_tiles) * SCALING, SCREEN_WIDTH, n, write_tile);
-        SWAP(write_tile, read_tile);
+      while (tft.dmaBusy()) {
+        vTaskDelay(0);
       }
+      tft.pushImageDMA(0, i * SCALING, SCREEN_WIDTH, SCALING, write_tile);
+      SWAP(write_tile, read_tile);
     }
 
     tft.endWrite();
