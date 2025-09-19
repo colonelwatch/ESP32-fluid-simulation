@@ -12,14 +12,17 @@
 #include "uq16.h"
 
 // configurables
-#define N_ROWS 60 // size of sim domain
-#define N_COLS 80 // size of sim domain
-#define SCALING 4 // integer scaling of domain -> screen size is inferred from this
-#define TILE_HEIGHT 60 // multiple of SCALING and a factor of (N_ROWS*SCALING)
-#define TILE_WIDTH 80  // multiple of SCALING and a factor of (N_COLS*SCALING)
-#define DT 1/20.0 // s, size of time step in sim time (should roughly match real FPS)
+#define SCALING 4
+#define DT 1/30.0 // s, size of time step in sim time (should roughly match real FPS)
 #define POLLING_PERIOD 10 // ms, for the touch screen
 // #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
+
+#define SCREEN_ROTATION 1
+#define SCREEN_HEIGHT TFT_WIDTH
+#define SCREEN_WIDTH TFT_HEIGHT
+
+#define N_ROWS (SCREEN_HEIGHT / SCALING) // size of sim domain
+#define N_COLS (SCREEN_WIDTH / SCALING) // size of sim domain
 
 #define SWAP(x, y) do { auto temp = x; x = y; y = temp; } while(0)
 
@@ -47,12 +50,6 @@ Vector3<UQ16> *color_field;
 SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary(), // read preceded by a write, and vice versa
     color_produced = xSemaphoreCreateBinary();
 TFT_eSPI tft = TFT_eSPI();
-TFT_eSprite tiles[2] = {TFT_eSprite(&tft), TFT_eSprite(&tft)}; // we'll use the two tiles for double-buffering
-uint16_t *foo[2] = { // TODO: related to above todo, only used to init memory early
-    (uint16_t*)tiles[0].createSprite(TILE_WIDTH, TILE_HEIGHT),
-    (uint16_t*)tiles[1].createSprite(TILE_WIDTH, TILE_HEIGHT)};
-const int SCREEN_HEIGHT = N_ROWS*SCALING, SCREEN_WIDTH = N_COLS*SCALING;
-const int N_TILES = SCREEN_HEIGHT/TILE_HEIGHT, M_TILES = SCREEN_WIDTH/TILE_WIDTH;
 
 // stats resources
 SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary(),
@@ -208,6 +205,7 @@ void sim_routine(void* args){
       local_stats.refresh_count = 0;
     }
 
+    // TODO: is there a better way to do this?
     vTaskDelay(1); // give a tick to lower-priority tasks (including the IDLE task?)
   }
 }
@@ -216,44 +214,97 @@ void sim_routine(void* args){
 void draw_routine(void* args){
   // As mentioned earlier, the simulation operates on a rotated view of the
   //  screen, so draw_routine needs to account for that
-  tft.setRotation(1); // landscape rotation
+  tft.setRotation(SCREEN_ROTATION); // landscape rotation
   tft.init();
   tft.fillScreen(TFT_BLACK);
   tft.initDMA();
 
   // pointers to tiles to be used for double-buffering
-  TFT_eSprite *write_tile = &tiles[0], *read_tile = &tiles[1];
+  // TODO: move to define?
+  const int n = 16;
+  const int n_tiles = n / SCALING;
+  uint16_t *write_tile = new uint16_t[n * SCREEN_WIDTH];
+  uint16_t *read_tile = new uint16_t[n * SCREEN_WIDTH];
 
   while(1){
     xSemaphoreTake(color_produced, portMAX_DELAY);
-    int buffer_select = 0;
 
     tft.startWrite(); // start a single transfer for all the tiles
 
-    for(int xx = 0; xx < M_TILES; xx++){
-      int x_start = xx*TILE_WIDTH, x_end = (xx+1)*TILE_WIDTH;
-      for(int yy = 0; yy < N_TILES; yy++){
-        int y_start = yy*TILE_HEIGHT, y_end = (yy+1)*TILE_HEIGHT;
+    const float inv_scaling = 1.0f / SCALING;
+    Vector3<float> row[SCALING][SCALING + 1];
+    Vector3<float> dc[SCALING];
 
-        int x_cell_start = x_start/SCALING, x_cell_end = x_end/SCALING;
-        for(int x_cell = x_cell_start; x_cell < x_cell_end; x_cell++){
-          int y_cell_start = y_start/SCALING, y_cell_end = y_end/SCALING;
-          for(int y_cell = y_cell_start; y_cell < y_cell_end; y_cell++){
-            // see above about the coordinate transform
-            Vector3<UQ16> color = color_field[index(y_cell, x_cell, N_ROWS)];
-            uint16_t color_565 = ((color.x.raw & 0xF800) |
-              ((color.y.raw & 0xFC00) >> 5) | ((color.z.raw & 0xF800) >> 11));
-            int y_local = y_cell*SCALING-y_start, x_local = x_cell*SCALING-x_start;
-            write_tile->fillRect(x_local, y_local, SCALING, SCALING, color_565);
+    int offset;
+    for (int i = 0; i < N_ROWS; i++) {
+      for (int j = 0; j < N_COLS; j++) {
+        offset = SCREEN_WIDTH * SCALING * (i % n_tiles) + SCALING * j;
+        
+        Vector3<UQ16> c1, c2, c3, c4;
+        c1 = color_field[index(i, j, N_ROWS)];
+        c2 = j == N_COLS - 1 ? c1 : color_field[index(i, j + 1, N_ROWS)];
+        c3 = i == N_ROWS - 1 ? c1 : color_field[index(i + 1, j, N_ROWS)];
+        // c4 = (j == N_COLS - 1 && i == N_ROWS - 1) ? c1 : color_field[index(i + 1, j + 1, N_ROWS)];
+        if (j == N_COLS - 1 && i == N_ROWS - 1) {
+          c4 = c1;  // eliminate this branch because c3 or c2 is c1 anyway?
+        } else if (j == N_COLS - 1) {
+          c4 = c3;
+        } else if (i == N_ROWS - 1) {
+          c4 = c2;
+        } else {
+          c4 = color_field[index(i + 1, j + 1, N_ROWS)];
+        }
+
+        int ii, jj;
+        float dx, dy;
+
+        if (j == 0) {
+          dc[0] = ((Vector3<float>)c3 - (Vector3<float>)c1) * inv_scaling;
+          row[0][0] = c1;
+          for (ii = 1; ii < SCALING; ii++) {
+            row[ii][0] = row[ii - 1][0] + dc[0];
+          }
+        } else {
+          for (ii = 0; ii < SCALING; ii++) {
+            row[ii][0] = row[ii][SCALING];
+          }
+        }
+        dc[1] = ((Vector3<float>)c4 - (Vector3<float>)c2) * inv_scaling;
+        row[0][SCALING] = c2;
+        for (ii = 1; ii < SCALING; ii++) {
+          row[ii][SCALING] = row[ii - 1][SCALING] + dc[1];
+        }
+
+        for (ii = 0; ii < SCALING; ii++) {
+          dc[ii] = (row[ii][SCALING] - row[ii][0]) * inv_scaling;
+        }
+
+        for (ii = 0; ii < SCALING; ii++) {
+          for (jj = 1; jj < SCALING; jj++) {
+            row[ii][jj] = row[ii][jj - 1] + dc[ii];
           }
         }
 
-        // pushImageDMA also spin-waits until the previous transfer is done
-        tft.pushImageDMA(x_start, y_start, TILE_WIDTH, TILE_HEIGHT, (uint16_t*)write_tile->getPointer());
+        for (ii = 0; ii < SCALING; ii++) {
+          for (jj = 0; jj < SCALING; jj++) {
+            Vector3<UQ16> color = row[ii][jj];
+            uint16_t color_565;
+            color_565 = ((color.x.raw & 0xF800) |
+                         ((color.y.raw & 0xFC00) >> 5) |
+                         ((color.z.raw & 0xF800) >> 11));
+            color_565 = __builtin_bswap16(color_565);
+            write_tile[offset + SCREEN_WIDTH * ii + jj] = color_565;
+          }
+        }
+      }
 
-        TFT_eSprite *temp = write_tile;
-        write_tile = read_tile;
-        read_tile = temp;
+      if ((i + 1) % n_tiles == 0) {
+        while (tft.dmaBusy()) {
+          vTaskDelay(0);
+          // vTaskDelay(1);
+        }
+        tft.pushImageDMA(0, ((i + 1) - n_tiles) * SCALING, SCREEN_WIDTH, n, write_tile);
+        SWAP(write_tile, read_tile);
       }
     }
 
@@ -374,13 +425,13 @@ void setup(void) {
   Serial.println("Launching tasks...");
   xSemaphoreGive(color_consumed); // start with a write not a read
   xSemaphoreGive(stats_consumed);
-  xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-1, NULL);
-  xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-2, NULL);
-  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
-  xTaskCreate(stats_routine, "stats", 2000, NULL, configMAX_PRIORITIES-4, NULL);
+  xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-1, NULL);
+  xTaskCreate(stats_routine, "stats", 2000, NULL, configMAX_PRIORITIES-2, NULL);
+  xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-3, NULL);
+  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-4, NULL);
 
 
-  vTaskDelete(NULL); // delete the setup-and-loop task
+  // vTaskDelete(NULL); // delete the setup-and-loop task
 }
 
 
