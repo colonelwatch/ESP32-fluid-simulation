@@ -204,9 +204,6 @@ void sim_routine(void* args){
       last_reported = now;
       local_stats.refresh_count = 0;
     }
-
-    // TODO: is there a better way to do this?
-    vTaskDelay(1); // give a tick to lower-priority tasks (including the IDLE task?)
   }
 }
 
