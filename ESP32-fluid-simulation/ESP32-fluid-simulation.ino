@@ -354,57 +354,54 @@ void setup(void) {
   Serial.begin(115200);
   pinMode(0, INPUT_PULLUP);
 
-
   Serial.println("Initializing velocity field...");
-  velocity_field = new Vector2<float>[N_COLS*N_ROWS];
-  for(int i = 0; i < N_ROWS; i++)
-    for(int j = 0; j < N_COLS; j++)
+  velocity_field = new Vector2<float>[N_COLS * N_ROWS];
+  for (int i = 0; i < N_ROWS; i++) {
+    for (int j = 0; j < N_COLS; j++) {
       velocity_field[index(i, j, N_ROWS)] = Vector2<float>(0, 0);
-
-  // Init the raw fields using rules, then smooth them with the kernel for the final color fields
+    }
+  }
 
   Serial.println("Initializing color fields...");
-  float kernel[3][3] = {{1/16.0, 1/8.0, 1/16.0}, {1/8.0, 1/4.0, 1/8.0}, {1/16.0, 1/8.0, 1/16.0}};
-  color_field = new Vector3<UQ16>[N_COLS*N_ROWS];
-
-  const int center_i = N_ROWS/2, center_j = N_COLS/2;
-  for(int i = 0; i < N_ROWS; i++){
-    for(int j = 0; j < N_COLS; j++){
-      // From matrix indexing of the actual domain...
-      float x = i-center_i, y = j-center_j; // ...to Cartesian indexing of the rotated domain...
-      float x_rotated = y, y_rotated = -x;  // ...to Cartesian indexing of the actual domain
-      float angle = atan2(y_rotated, x_rotated);
-
-      if (angle < -PI/3) {
-        color_field[index(i, j, N_ROWS)] = Vector3<float>(65535, 0, 0);
-      } else if (angle >= -PI/3 && angle < PI/3) {
-        color_field[index(i, j, N_ROWS)] = Vector3<float>(0, 65535, 0);
+  const int center_i = N_ROWS / 2, center_j = N_COLS / 2;
+  const Vector3<float> red(UINT16_MAX, 0, 0), green(0, UINT16_MAX, 0),
+                       blue(0, 0, UINT16_MAX);
+  color_field = new Vector3<UQ16>[N_COLS * N_ROWS];
+  for (int i = 0; i < N_ROWS; i++) {
+    for (int j = 0; j < N_COLS; j++) {
+      // color based on angle, computing Cartesian x and y from indices i and j
+      float angle = atan2f(-(i - center_i), j - center_j);
+      if (angle < -PI / 3) {
+        color_field[index(i, j, N_ROWS)] = red;
+      } else if (angle >= -PI / 3 && angle < PI / 3) {
+        color_field[index(i, j, N_ROWS)] = green;
       } else {
-        color_field[index(i, j, N_ROWS)] = Vector3<float>(0, 0, 65535);
+        color_field[index(i, j, N_ROWS)] = blue;
       }
     }
   }
-
-  for(int i = 0; i < N_ROWS; i++){
-    for(int j = 0; j < N_COLS; j++){
-      Vector3<float> smoothed(0, 0, 0);
-
-      for(int di = 0; di < 3; di++){
-        for(int dj = 0; dj < 3; dj++){
-          int ii = i+di, jj = j+dj;
-
-          // extend the edge of the field by repeating the last row/column
-          if(ii > N_ROWS-1) ii = N_ROWS-1;
-          if(jj > N_COLS-1) jj = N_COLS-1;
-
-          smoothed += kernel[di][dj]*color_field[index(ii, jj, N_ROWS)];
-        }
-      }
-
-      color_field[index(i, j, N_ROWS)] = smoothed;
+  for (int i = 0; i < N_ROWS; i++) {
+    for (int j = 0; j < N_COLS; j++) {
+      // smooth in the horitzontal dimension with a triangular kernel
+      Vector3<UQ16> left, center, right;
+      center = color_field[index(i, j, N_ROWS)];
+      left = (j == 0) ? center : color_field[index(i, j - 1, N_ROWS)];
+      right = (j == N_COLS - 1) ? center : color_field[index(i, j + 1, N_ROWS)];
+      color_field[index(i, j, N_ROWS)] = (0.25f * left + 0.5f * center +
+                                          0.25f * right);
     }
   }
-
+  for (int i = 0; i < N_ROWS; i++) {
+    for (int j = 0; j < N_COLS; j++) {
+      // smooth in the horitzontal dimension with the same kernel
+      Vector3<UQ16> bot, center, top;
+      center = color_field[index(i, j, N_ROWS)];
+      top = (i == 0) ? center : color_field[index(i - 1, j, N_ROWS)];
+      bot = (i == N_ROWS - 1) ? center : color_field[index(i + 1, j, N_ROWS)];
+      color_field[index(i, j, N_ROWS)] = (0.25f * top + 0.5f * center +
+                                          0.25f * bot);
+    }
+  }
 
   Serial.println("Launching tasks...");
   xSemaphoreGive(color_consumed); // start with a write not a read
@@ -413,12 +410,7 @@ void setup(void) {
   xTaskCreate(stats_routine, "stats", 2000, NULL, configMAX_PRIORITIES-2, NULL);
   xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-3, NULL);
   xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-4, NULL);
-
-
-  // vTaskDelete(NULL); // delete the setup-and-loop task
 }
 
 
-void loop(void) {
-  // Not actually used
-}
+void loop(void) {}
