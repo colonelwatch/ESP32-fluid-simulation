@@ -10,6 +10,7 @@
 #include "poisson.h"
 #include "uq16.h"
 
+
 // configurable defines
 #define SCALING 4  // determines size of sim domain, factor of 240 and 320
 #define DT (1 / 30.0f)  // s, size of sim time step (should match real FPS)
@@ -35,6 +36,7 @@
 // macros
 #define SWAP(x, y) do { auto temp = x; x = y; y = temp; } while(0)
 
+
 // touch resources
 struct drag {
   Vector2<uint16_t> coords;
@@ -52,17 +54,6 @@ Vector3<UQ16> *color_field = new Vector3<UQ16>[N_COLS * N_ROWS];
 SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary();
 SemaphoreHandle_t color_produced = xSemaphoreCreateBinary();
 TFT_eSPI tft = TFT_eSPI();
-
-// stats resources
-SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary();
-SemaphoreHandle_t stats_produced = xSemaphoreCreateBinary();
-struct stats {
-  unsigned long point_timestamps[6];
-  float current_error;  // "current" -> worst over domain at current time
-  float max_error;  // "max" -> worst over domain and all time
-  int refresh_count;
-};
-struct stats global_stats;
 
 
 void touch_routine (void *args)
@@ -104,22 +95,14 @@ void touch_routine (void *args)
 void sim_routine(void* args){
   // local stats and timing the reporting of those stats
   unsigned long now, last_reported = millis();
-  struct stats local_stats = (struct stats){ .max_error = 0,
-                                             .refresh_count = 0 };
 
   while(1){
-    // holds the millis() for when calculating the time step started
-    local_stats.point_timestamps[0] = millis();
-
     // Swap the velocity field with the advected one
     Vector2<float> *v_temp = new Vector2<float>[N_ROWS*N_COLS];
     advect(v_temp, velocity_field, velocity_field, N_ROWS, N_COLS,
            DT, true);
     SWAP(v_temp, velocity_field);
     delete[] v_temp;
-
-    local_stats.point_timestamps[1] = millis();
-
 
     /* Apply the captured drag. They're defined in the graphics coordinate
     system, i.e matrix indexing, but the sim uses Cartesian indexing.
@@ -134,7 +117,6 @@ void sim_routine(void* args){
       velocity_field[ij] = swapped;
     }
 
-
     // Get divergence-free velocity (with 1.96 as a found omega for 60x80 grid)
     float *div_v = new float[N_ROWS * N_COLS];
     float *p = new float[N_ROWS * N_COLS];
@@ -144,23 +126,14 @@ void sim_routine(void* args){
     delete[] div_v;
     delete[] p;
 
-    local_stats.point_timestamps[2] = millis();
-
-
     Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
     advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
-
-    local_stats.point_timestamps[3] = millis();
-
 
     // Swap the color field with the advected one
     xSemaphoreTake(color_consumed, portMAX_DELAY);
     SWAP(c_temp, color_field);
     delete[] c_temp;
     xSemaphoreGive(color_produced);
-
-    local_stats.point_timestamps[4] = millis();
-
 
     #ifdef DIVERGENCE_TRACKING
     // compute post-projection divergence
@@ -192,22 +165,6 @@ void sim_routine(void* args){
 
     delete[] new_div_v;
     #endif
-
-    local_stats.point_timestamps[5] = millis();
-
-
-    // Update the global stats
-    now = millis();
-    local_stats.refresh_count++;
-    if(now - last_reported > 5000){
-      xSemaphoreTake(stats_consumed, portMAX_DELAY);
-      global_stats = local_stats;
-      xSemaphoreGive(stats_produced);
-
-      // don't reset max_error because it's a running max
-      last_reported = now;
-      local_stats.refresh_count = 0;
-    }
   }
 }
 
@@ -303,73 +260,13 @@ void draw_routine(void* args){
 }
 
 
-void stats_routine(void* args){
-  struct stats local_stats;
-  unsigned long now, last_reported = millis(), elapsed;
-  while(1){
-    xSemaphoreTake(stats_produced, portMAX_DELAY);
-    local_stats = global_stats;
-    global_stats.refresh_count = 0;
-    xSemaphoreGive(stats_consumed);
-
-    now = millis();
-    elapsed = now - last_reported;
-    last_reported = now;
-
-    float refresh_rate = 1000 * (float)local_stats.refresh_count / elapsed;
-    float time_taken[5], total_time, pct_taken[5];
-    for (int i = 0; i < 5; i++) {
-      time_taken[i] = (local_stats.point_timestamps[i + 1] -
-                       local_stats.point_timestamps[i]) / 1000.0;
-    }
-    total_time = (local_stats.point_timestamps[5] -
-                  local_stats.point_timestamps[0]) / 1000.0;
-    for (int i = 0; i < 5; i++) {
-      pct_taken[i] = 100 * time_taken[i] / total_time;
-    }
-
-    Serial.print("FPS: ");
-    Serial.print(refresh_rate, 1);
-    Serial.print(", ");
-    Serial.print("Pct times: (");
-    for(int i = 0; i < 5; i++){
-      Serial.print(pct_taken[i], 1);
-      Serial.print("%");
-      if(i < 4) Serial.print(", ");
-    }
-    Serial.print(")");
-    Serial.print(", ");
-
-    #ifdef DIVERGENCE_TRACKING
-    Serial.print("Err now: ");
-    Serial.print(local_stats.current_error, 1);
-    Serial.print("%");
-    Serial.print(", ");
-    Serial.print("Err max: ");
-    Serial.print(local_stats.max_error, 1);
-    Serial.print("%");
-    Serial.print(", ");
-    #endif
-
-    Serial.print("Drag queue sz: ");
-    Serial.print(uxQueueMessagesWaiting(drag_queue));
-    Serial.println();
-  }
-}
-
-
 void setup(void) {
-  Serial.begin(115200);
-  pinMode(0, INPUT_PULLUP);
-
-  Serial.println("Initializing velocity field...");
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
       velocity_field[index(i, j, N_ROWS)] = Vector2<float>(0, 0);
     }
   }
 
-  Serial.println("Initializing color fields...");
   const int center_i = N_ROWS / 2, center_j = N_COLS / 2;
   const Vector3<float> red(UINT16_MAX, 0, 0), green(0, UINT16_MAX, 0),
                        blue(0, 0, UINT16_MAX);
@@ -409,13 +306,10 @@ void setup(void) {
     }
   }
 
-  Serial.println("Launching tasks...");
   xSemaphoreGive(color_consumed); // start with a write not a read
-  xSemaphoreGive(stats_consumed);
   xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-1, NULL);
-  xTaskCreate(stats_routine, "stats", 2000, NULL, configMAX_PRIORITIES-2, NULL);
-  xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-3, NULL);
-  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-4, NULL);
+  xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-2, NULL);
+  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
 }
 
 
