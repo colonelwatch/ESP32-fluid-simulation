@@ -17,10 +17,11 @@
 #define POLLING_PERIOD 10  // ms, for the touch screen
 // #define DIVERGENCE_TRACKING  // enables divergence tracking (costs FPS)
 
-// tft defines
+// draw defines
 #define SCREEN_ROTATION 1
 #define SCREEN_HEIGHT TFT_WIDTH
 #define SCREEN_WIDTH TFT_HEIGHT
+#define INV_SCALING (1.0f / SCALING)
 
 // touch defines
 #define XPT2046_IRQ  36
@@ -170,8 +171,8 @@ void sim_routine(void* args){
 
 
 void draw_routine(void* args){
-  // As mentioned earlier, the simulation operates on a rotated view of the
-  //  screen, so draw_routine needs to account for that
+  Serial.begin(115200);
+
   tft.setRotation(SCREEN_ROTATION); // landscape rotation
   tft.init();
   tft.fillScreen(TFT_BLACK);
@@ -181,11 +182,6 @@ void draw_routine(void* args){
   uint16_t *write_tile = new uint16_t[SCALING * SCREEN_WIDTH];
   uint16_t *read_tile = new uint16_t[SCALING * SCREEN_WIDTH];
 
-  const float inv_scaling = 1.0f / SCALING;
-  Vector3<UQ16> c1, c2, c3, c4;
-  Vector3<float> dc;
-  Vector3<float> interp[SCALING][SCALING + 1];
-
   while(1){
     xSemaphoreTake(color_produced, portMAX_DELAY);
 
@@ -193,45 +189,62 @@ void draw_routine(void* args){
 
     for (int i = 0; i < N_ROWS; i++) {
       for (int j = 0; j < N_COLS; j++) {
+        int ij1, ij2, ij3, ij4;
+        Vector3<float> c, dc;
+        Vector3<float> interp[SCALING][SCALING + 1];
 
+        /* Pull four points for bilinear interpolation, accounting for the sim
+        domain being rotated and filling in points if on the boundary. */
         bool is_right_border = (j == N_COLS - 1);
         bool is_bottom_border = (i == N_ROWS - 1);
-        c1 = color_field[index(i, j, N_ROWS)];
-        c2 = is_right_border ? c1 : color_field[index(i, j + 1, N_ROWS)];
-        c3 = is_bottom_border ? c1 : color_field[index(i + 1, j, N_ROWS)];
+        ij1 = index(i, j, N_ROWS);
+        ij2 = is_right_border ? ij1 : index(i, j + 1, N_ROWS);
+        ij3 = is_bottom_border ? ij1 : index(i + 1, j, N_ROWS);
         if (!(is_right_border || is_bottom_border)) {
-          c4 = color_field[index(i + 1, j + 1, N_ROWS)];
+          ij4 = index(i + 1, j + 1, N_ROWS);
         }else if (is_right_border) {
-          c4 = c3;
+          ij4 = ij3;
         } else {  // is_bottom_border
-          c4 = c2;
+          ij4 = ij2;
         }
 
+        /* Bilinear interpolation is "separable" (i.e. can be implemented as
+        a sequence of 1D operations, usually for lower big-O overall), and it
+        can be done recursively, using the previous point to get the next.*/
         if (j == 0) {
-          dc = ((Vector3<float>)c3 - (Vector3<float>)c1) * inv_scaling;
-          interp[0][0] = c1;
-          for (int ii = 1; ii < SCALING; ii++) {
-            interp[ii][0] = interp[ii - 1][0] + dc;
+          // Lerp between top-left and bottom-left with "strength reduction"
+          c = color_field[ij1];
+          dc = ((Vector3<float>)color_field[ij3] - c) * INV_SCALING;
+          for (int ii = 0; ii < SCALING; ii++) {
+            interp[ii][0] = c;
+            c += dc;
           }
         } else {
+          // Just copy the old "top-right" and "bottom-right"
           for (int ii = 0; ii < SCALING; ii++) {
             interp[ii][0] = interp[ii][SCALING];
           }
         }
 
-        dc = ((Vector3<float>)c4 - (Vector3<float>)c2) * inv_scaling;
-        interp[0][SCALING] = c2;
-        for (int ii = 1; ii < SCALING; ii++) {
-          interp[ii][SCALING] = interp[ii - 1][SCALING] + dc;
+        // lerp between top-right and bottom-right (in order to caluclate dc)
+        c = color_field[ij2];
+        dc = ((Vector3<float>)color_field[ij4] - c) * INV_SCALING;
+        for (int ii = 0; ii < SCALING; ii++) {
+          interp[ii][SCALING] = c;
+          c += dc;
         }
 
+        // lerp between the left-side lerp and the right-side lerp
         for (int ii = 0; ii < SCALING; ii++) {
-          dc = (interp[ii][SCALING] - interp[ii][0]) * inv_scaling;
-          for (int jj = 1; jj < SCALING; jj++) {
-            interp[ii][jj] = interp[ii][jj - 1] + dc;
+          c = interp[ii][0];
+          dc = (interp[ii][SCALING] - c) * INV_SCALING;
+          for (int jj = 0; jj < SCALING; jj++) {
+            interp[ii][jj] = c;
+            c += dc;
           }
         }
 
+        // render to tile
         int offset = SCALING * j;
         for (int ii = 0; ii < SCALING; ii++) {
           for (int jj = 0; jj < SCALING; jj++) {
@@ -246,6 +259,7 @@ void draw_routine(void* args){
         }
       }
 
+      // yield to higher-priority tasks until ready, then start transfer
       while (tft.dmaBusy()) {
         vTaskDelay(0);
       }
@@ -261,12 +275,14 @@ void draw_routine(void* args){
 
 
 void setup(void) {
+  // initialize velocity field
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
       velocity_field[index(i, j, N_ROWS)] = Vector2<float>(0, 0);
     }
   }
 
+  // initialize color field
   const int center_i = N_ROWS / 2, center_j = N_COLS / 2;
   const Vector3<float> red(UINT16_MAX, 0, 0), green(0, UINT16_MAX, 0),
                        blue(0, 0, UINT16_MAX);
