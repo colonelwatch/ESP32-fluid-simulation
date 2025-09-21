@@ -12,9 +12,13 @@
 
 
 // configurable defines
-#define SCALING 4  // determines size of sim domain, factor of 240 and 320
-#define DT (1 / 30.0f)  // s, size of sim time step (should match real FPS)
-#define POLLING_PERIOD 10  // ms, for the touch screen
+#define SCALING 4           // sets size of sim domain, factor of 240 and 320
+#define DT (1 / 30.0f)      // s, size of sim time step (should match real FPS)
+#define POLLING_PERIOD 10   // ms, for the touch screen
+#define TOUCH_MIN_X 200     // input min x, determined by calibration
+#define TOUCH_MAX_X 3700    // input max x, determined by calibration
+#define TOUCH_MIN_Y 240     // input min y, determined by calibration
+#define TOUCH_MAX_Y 3800    // input max y, determined by calibration
 
 // draw defines
 #define SCREEN_ROTATION 1
@@ -30,8 +34,8 @@
 #define XPT2046_CS   33
 
 // sim defines
-#define N_ROWS (SCREEN_HEIGHT / SCALING) // size of sim domain
-#define N_COLS (SCREEN_WIDTH / SCALING) // size of sim domain
+#define N_ROWS (SCREEN_HEIGHT / SCALING)
+#define N_COLS (SCREEN_WIDTH / SCALING)
 
 // macros
 #define SWAP(x, y) do { auto temp = (x); (x) = (y); (y) = temp; } while(0)
@@ -69,9 +73,9 @@ void touch_routine(void *args)
 
     if (touched) {
       // We need to map from a 4096x4096 domain to a N_ROWSxN_COLS one
-      TS_Point raw_coords = ts.getPoint();
-      Vector2<int> coords(raw_coords.x * N_COLS / 4096,
-                          raw_coords.y * N_ROWS / 4096);
+      TS_Point raw = ts.getPoint();
+      Vector2<int> coords(map(raw.x, TOUCH_MIN_X, TOUCH_MAX_X, 0, N_COLS),
+                          map(raw.y, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, N_ROWS));
 
       // only send a drag struct if a velocity can be calculated
       if (last_touched) {
