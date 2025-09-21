@@ -57,7 +57,7 @@ SemaphoreHandle_t color_produced = xSemaphoreCreateBinary();
 TFT_eSPI tft = TFT_eSPI();
 
 
-void touch_routine (void *args)
+void touch_routine(void *args)
 {
   ts.setRotation(1); // landscape rotation
   ts_spi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
@@ -93,10 +93,8 @@ void touch_routine (void *args)
 }
 
 
-void sim_routine(void* args){
-  // local stats and timing the reporting of those stats
-  unsigned long now, last_reported = millis();
-
+void sim_routine(void* args)
+{
   while(1){
     // Swap the velocity field with the advected one
     Vector2<float> *v_temp = new Vector2<float>[N_ROWS*N_COLS];
@@ -170,7 +168,8 @@ void sim_routine(void* args){
 }
 
 
-void draw_routine(void* args){
+void draw_routine(void* args)
+{
   Serial.begin(115200);
 
   tft.setRotation(SCREEN_ROTATION); // landscape rotation
@@ -274,7 +273,8 @@ void draw_routine(void* args){
 }
 
 
-void setup(void) {
+void setup(void)
+{
   // initialize velocity field
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
