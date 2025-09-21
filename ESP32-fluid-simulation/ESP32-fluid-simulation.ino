@@ -1,8 +1,7 @@
 #include <cmath>
 
 #include <SPI.h>
-
-#include <TFT_eSPI.h> // WARNING: before uploading, acquire custom User_Setup.h (see monorepo)
+#include <TFT_eSPI.h> // WARNING: acquire custom User_Setup.h from monorepo
 #include <XPT2046_Touchscreen.h>
 
 #include "vector.h"
@@ -11,21 +10,30 @@
 #include "poisson.h"
 #include "uq16.h"
 
-// configurables
-#define SCALING 4
-#define DT 1/30.0 // s, size of time step in sim time (should roughly match real FPS)
-#define POLLING_PERIOD 10 // ms, for the touch screen
-// #define DIVERGENCE_TRACKING // if commented out, disables divergence tracking for some extra FPS
+// configurable defines
+#define SCALING 4  // determines size of sim domain, factor of 240 and 320
+#define DT (1 / 30.0f)  // s, size of sim time step (should match real FPS)
+#define POLLING_PERIOD 10  // ms, for the touch screen
+// #define DIVERGENCE_TRACKING  // enables divergence tracking (costs FPS)
 
+// tft defines
 #define SCREEN_ROTATION 1
 #define SCREEN_HEIGHT TFT_WIDTH
 #define SCREEN_WIDTH TFT_HEIGHT
 
+// touch defines
+#define XPT2046_IRQ  36
+#define XPT2046_MOSI 32
+#define XPT2046_MISO 39
+#define XPT2046_CLK  25
+#define XPT2046_CS   33
+
+// sim defines
 #define N_ROWS (SCREEN_HEIGHT / SCALING) // size of sim domain
 #define N_COLS (SCREEN_WIDTH / SCALING) // size of sim domain
 
+// macros
 #define SWAP(x, y) do { auto temp = x; x = y; y = temp; } while(0)
-
 
 // touch resources
 struct drag {
@@ -33,31 +41,25 @@ struct drag {
   Vector2<float> velocity;
 };
 QueueHandle_t drag_queue = xQueueCreate(10, sizeof(struct drag));
-const int XPT2046_IRQ = 36;
-const int XPT2046_MOSI = 32;
-const int XPT2046_MISO = 39;
-const int XPT2046_CLK = 25;
-const int XPT2046_CS = 33;
 SPIClass ts_spi = SPIClass(VSPI);
 XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
-// essential sim resources
-// TODO: allocation here causes a crash, AND runtime allocation of the
-//  velocity field AFTER the color fields causes a crash?
-Vector2<float> *velocity_field;
-Vector3<UQ16> *color_field;
+
+// sim resources
+Vector2<float> *velocity_field = new Vector2<float>[N_COLS * N_ROWS];
+Vector3<UQ16> *color_field = new Vector3<UQ16>[N_COLS * N_ROWS];
 
 // draw resources
-SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary(), // read preceded by a write, and vice versa
-    color_produced = xSemaphoreCreateBinary();
+SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary();
+SemaphoreHandle_t color_produced = xSemaphoreCreateBinary();
 TFT_eSPI tft = TFT_eSPI();
 
 // stats resources
-SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary(),
-    stats_produced = xSemaphoreCreateBinary();
-struct stats{
+SemaphoreHandle_t stats_consumed = xSemaphoreCreateBinary();
+SemaphoreHandle_t stats_produced = xSemaphoreCreateBinary();
+struct stats {
   unsigned long point_timestamps[6];
-  float current_error; // "current" -> worst over domain at current time
-  float max_error; // "max" -> worst over domain and all time
+  float current_error;  // "current" -> worst over domain at current time
+  float max_error;  // "max" -> worst over domain and all time
   int refresh_count;
 };
 struct stats global_stats;
@@ -102,10 +104,12 @@ void touch_routine (void *args)
 void sim_routine(void* args){
   // local stats and timing the reporting of those stats
   unsigned long now, last_reported = millis();
-  struct stats local_stats = (struct stats){ .max_error = 0, .refresh_count = 0 };
+  struct stats local_stats = (struct stats){ .max_error = 0,
+                                             .refresh_count = 0 };
 
   while(1){
-    local_stats.point_timestamps[0] = millis(); // holds the millis() for when calculating the time step started
+    // holds the millis() for when calculating the time step started
+    local_stats.point_timestamps[0] = millis();
 
     // Swap the velocity field with the advected one
     Vector2<float> *v_temp = new Vector2<float>[N_ROWS*N_COLS];
@@ -312,13 +316,17 @@ void stats_routine(void* args){
     elapsed = now - last_reported;
     last_reported = now;
 
-    float refresh_rate = 1000*(float)local_stats.refresh_count/elapsed;
+    float refresh_rate = 1000 * (float)local_stats.refresh_count / elapsed;
     float time_taken[5], total_time, pct_taken[5];
-    for(int i = 0; i < 5; i++)
-      time_taken[i] = (local_stats.point_timestamps[i+1]-local_stats.point_timestamps[i])/1000.0;
-    total_time = (local_stats.point_timestamps[5]-local_stats.point_timestamps[0])/1000.0;
-    for(int i = 0; i < 5; i++)
-      pct_taken[i] = 100*time_taken[i]/total_time;
+    for (int i = 0; i < 5; i++) {
+      time_taken[i] = (local_stats.point_timestamps[i + 1] -
+                       local_stats.point_timestamps[i]) / 1000.0;
+    }
+    total_time = (local_stats.point_timestamps[5] -
+                  local_stats.point_timestamps[0]) / 1000.0;
+    for (int i = 0; i < 5; i++) {
+      pct_taken[i] = 100 * time_taken[i] / total_time;
+    }
 
     Serial.print("FPS: ");
     Serial.print(refresh_rate, 1);
@@ -355,7 +363,6 @@ void setup(void) {
   pinMode(0, INPUT_PULLUP);
 
   Serial.println("Initializing velocity field...");
-  velocity_field = new Vector2<float>[N_COLS * N_ROWS];
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
       velocity_field[index(i, j, N_ROWS)] = Vector2<float>(0, 0);
@@ -366,7 +373,6 @@ void setup(void) {
   const int center_i = N_ROWS / 2, center_j = N_COLS / 2;
   const Vector3<float> red(UINT16_MAX, 0, 0), green(0, UINT16_MAX, 0),
                        blue(0, 0, UINT16_MAX);
-  color_field = new Vector3<UQ16>[N_COLS * N_ROWS];
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
       // color based on angle, computing Cartesian x and y from indices i and j
