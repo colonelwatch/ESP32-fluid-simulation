@@ -24,8 +24,8 @@ If you're interested in this specific kind of fluid simulation and you have an u
 
 I also have a series of articles on my personal website, though they may not be entirely up to date. If read from beginning to end, these articles should only require linear algebra and ordinary calculus. They're linked below:
 
-1. [https://kenny-peng.com/2023/07/21/esp32_fluid_sim_1.html](Rebuilding ESP32-fluid-simulation: overview of tasks and intertask communication in FreeRTOS (Part 1))
-2. [https://kenny-peng.com/2023/07/30/esp32_fluid_sim_2.html](Rebuilding ESP32-fluid-simulation: the touch and render tasks (Part 2))
-3. [https://kenny-peng.com/2023/09/22/esp32_fluid_sim_3.html](Rebuilding ESP32-fluid-simulation: an outline of the sim task (Part 3))
-4. [https://kenny-peng.com/2024/01/20/esp32_fluid_sim_4.html](Rebuilding ESP32-fluid-simulation: the advection and force steps of the sim task (Part 4))
-5. [https://kenny-peng.com/2024/09/26/esp32_fluid_sim_5.html](Rebuilding ESP32-fluid-simulation: the pressure projection step of the sim task (Part 5))
+1. [Rebuilding ESP32-fluid-simulation: overview of tasks and intertask communication in FreeRTOS (Part 1)](https://kenny-peng.com/2023/07/21/esp32_fluid_sim_1.html)
+2. [Rebuilding ESP32-fluid-simulation: the touch and render tasks (Part 2)](https://kenny-peng.com/2023/07/30/esp32_fluid_sim_2.html)
+3. [Rebuilding ESP32-fluid-simulation: an outline of the sim task (Part 3)](https://kenny-peng.com/2023/09/22/esp32_fluid_sim_3.html)
+4. [Rebuilding ESP32-fluid-simulation: the advection and force steps of the sim task (Part 4)](https://kenny-peng.com/2024/01/20/esp32_fluid_sim_4.html)
+5. [Rebuilding ESP32-fluid-simulation: the pressure projection step of the sim task (Part 5)](https://kenny-peng.com/2024/09/26/esp32_fluid_sim_5.html)
