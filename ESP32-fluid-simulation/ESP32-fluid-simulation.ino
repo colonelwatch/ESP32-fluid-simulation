@@ -92,50 +92,6 @@ void touch_routine(void *args)
 }
 
 
-void sim_routine(void* args)
-{
-  while(1){
-    // Swap the velocity field with the advected one
-    Vector2<float> *v_temp = new Vector2<float>[N_ROWS*N_COLS];
-    advect(v_temp, velocity_field, velocity_field, N_ROWS, N_COLS,
-           DT, true);
-    SWAP(v_temp, velocity_field);
-    delete[] v_temp;
-
-    /* Apply the captured drag. They're defined in the graphics coordinate
-    system, i.e matrix indexing, but the sim uses Cartesian indexing.
-           Λ   y i.e. j  Cartesian     ─┼─> j i.e. "x"  Graphics
-          ─┼─> x i.e. i                 V   i i.e. "y"
-    The response: if the sim domain is rotated 90 deg relative to the actual
-    domain, the transform is just to swap x and y. */
-    struct drag msg;
-    while(xQueueReceive(drag_queue, &msg, 0) == pdTRUE){
-      int ij = index(msg.coords.y, msg.coords.x, N_ROWS);
-      Vector2<float> swapped(msg.velocity.y, msg.velocity.x);
-      velocity_field[ij] = swapped;
-    }
-
-    // Get divergence-free velocity (with 1.96 as a found omega for 60x80 grid)
-    float *div_v = new float[N_ROWS * N_COLS];
-    float *p = new float[N_ROWS * N_COLS];
-    calculate_divergence(div_v, velocity_field, N_ROWS, N_COLS, 1);
-    poisson_solve(p, div_v, N_ROWS, N_COLS, 1, 10, 1.96);
-    subtract_gradient(velocity_field, p, N_ROWS, N_COLS, 1);
-    delete[] div_v;
-    delete[] p;
-
-    Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
-    advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
-
-    // Swap the color field with the advected one
-    xSemaphoreTake(color_consumed, portMAX_DELAY);
-    SWAP(c_temp, color_field);
-    delete[] c_temp;
-    xSemaphoreGive(color_produced);
-  }
-}
-
-
 void draw_routine(void* args)
 {
   tft.setRotation(SCREEN_ROTATION); // landscape rotation
@@ -291,8 +247,46 @@ void setup(void)
   xSemaphoreGive(color_consumed); // start with a write not a read
   xTaskCreate(touch_routine, "touch", 2000, NULL, configMAX_PRIORITIES-1, NULL);
   xTaskCreate(draw_routine, "draw", 2000, NULL, configMAX_PRIORITIES-2, NULL);
-  xTaskCreate(sim_routine, "sim", 2000, NULL, configMAX_PRIORITIES-3, NULL);
 }
 
 
-void loop(void) {}
+void loop(void)
+{
+  // Swap the velocity field with the advected one
+  Vector2<float> *v_temp = new Vector2<float>[N_ROWS*N_COLS];
+  advect(v_temp, velocity_field, velocity_field, N_ROWS, N_COLS,
+          DT, true);
+  SWAP(v_temp, velocity_field);
+  delete[] v_temp;
+
+  /* Apply the captured drag. They're defined in the graphics coordinate
+  system, i.e matrix indexing, but the sim uses Cartesian indexing.
+          Λ   y i.e. j  Cartesian     ─┼─> j i.e. "x"  Graphics
+        ─┼─> x i.e. i                 V   i i.e. "y"
+  The response: if the sim domain is rotated 90 deg relative to the actual
+  domain, the transform is just to swap x and y. */
+  struct drag msg;
+  while(xQueueReceive(drag_queue, &msg, 0) == pdTRUE){
+    int ij = index(msg.coords.y, msg.coords.x, N_ROWS);
+    Vector2<float> swapped(msg.velocity.y, msg.velocity.x);
+    velocity_field[ij] = swapped;
+  }
+
+  // Get divergence-free velocity (with 1.96 as a found omega for 60x80 grid)
+  float *div_v = new float[N_ROWS * N_COLS];
+  float *p = new float[N_ROWS * N_COLS];
+  calculate_divergence(div_v, velocity_field, N_ROWS, N_COLS, 1);
+  poisson_solve(p, div_v, N_ROWS, N_COLS, 1, 10, 1.96);
+  subtract_gradient(velocity_field, p, N_ROWS, N_COLS, 1);
+  delete[] div_v;
+  delete[] p;
+
+  Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
+  advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
+
+  // Swap the color field with the advected one
+  xSemaphoreTake(color_consumed, portMAX_DELAY);
+  SWAP(c_temp, color_field);
+  delete[] c_temp;
+  xSemaphoreGive(color_produced);
+}
