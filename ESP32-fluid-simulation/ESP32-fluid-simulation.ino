@@ -34,7 +34,7 @@
 #define N_COLS (SCREEN_WIDTH / SCALING) // size of sim domain
 
 // macros
-#define SWAP(x, y) do { auto temp = x; x = y; y = temp; } while(0)
+#define SWAP(x, y) do { auto temp = (x); (x) = (y); (y) = temp; } while(0)
 
 
 // touch resources
