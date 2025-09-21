@@ -8,7 +8,7 @@
 #include "advect.h"
 #include "finitediff.h"
 #include "poisson.h"
-#include "uq16.h"
+#include "uq32.h"
 
 
 // configurable defines
@@ -52,7 +52,7 @@ XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
 
 // sim resources
 Vector2<float> *velocity_field = new Vector2<float>[N_COLS * N_ROWS];
-Vector3<UQ16> *color_field = new Vector3<UQ16>[N_COLS * N_ROWS];
+Vector3<UQ32> *color_field = new Vector3<UQ32>[N_COLS * N_ROWS];
 
 // draw resources
 SemaphoreHandle_t color_consumed = xSemaphoreCreateBinary();
@@ -173,11 +173,11 @@ void draw_routine(void* args)
         int offset = SCALING * j;
         for (int ii = 0; ii < SCALING; ii++) {
           for (int jj = 0; jj < SCALING; jj++) {
-            Vector3<UQ16> color = interp[ii][jj];
+            Vector3<UQ32> color = interp[ii][jj];
             uint16_t color_565;
-            color_565 = ((color.x.raw & 0xF800) |
-                         ((color.y.raw & 0xFC00) >> 5) |
-                         ((color.z.raw & 0xF800) >> 11));
+            color_565 = (((color.x.raw & 0xF8000000) >> 16) |
+                         ((color.y.raw & 0xFC000000) >> 21) |
+                         ((color.z.raw & 0xF8000000) >> 27));
             color_565 = __builtin_bswap16(color_565);
             write_tile[offset + SCREEN_WIDTH * ii + jj] = color_565;
           }
@@ -210,8 +210,8 @@ void setup(void)
 
   // initialize color field
   const int center_i = N_ROWS / 2, center_j = N_COLS / 2;
-  const Vector3<float> red(UINT16_MAX, 0, 0), green(0, UINT16_MAX, 0),
-                       blue(0, 0, UINT16_MAX);
+  const Vector3<float> red(UINT32_MAX, 0UL, 0UL), green(0UL, UINT32_MAX, 0UL),
+                       blue(0UL, 0UL, UINT32_MAX);
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
       // color based on angle, computing Cartesian x and y from indices i and j
@@ -228,7 +228,7 @@ void setup(void)
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
       // smooth in the horitzontal dimension with a triangular kernel
-      Vector3<UQ16> left, center, right;
+      Vector3<UQ32> left, center, right;
       center = color_field[index(i, j, N_ROWS)];
       left = (j == 0) ? center : color_field[index(i, j - 1, N_ROWS)];
       right = (j == N_COLS - 1) ? center : color_field[index(i, j + 1, N_ROWS)];
@@ -239,7 +239,7 @@ void setup(void)
   for (int i = 0; i < N_ROWS; i++) {
     for (int j = 0; j < N_COLS; j++) {
       // smooth in the horitzontal dimension with the same kernel
-      Vector3<UQ16> bot, center, top;
+      Vector3<UQ32> bot, center, top;
       center = color_field[index(i, j, N_ROWS)];
       top = (i == 0) ? center : color_field[index(i - 1, j, N_ROWS)];
       bot = (i == N_ROWS - 1) ? center : color_field[index(i + 1, j, N_ROWS)];
@@ -286,7 +286,7 @@ void loop(void)
   delete[] p;
 
   // Advect color field on a temp field
-  Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
+  Vector3<UQ32> *c_temp = new Vector3<UQ32>[N_ROWS * N_COLS];
   advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
 
   // Swap the color field with the temp field, then delete
