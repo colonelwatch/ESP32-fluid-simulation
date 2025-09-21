@@ -261,7 +261,7 @@ void loop(void)
 
   /* Apply the captured drag. They're defined in the graphics coordinate
   system, i.e matrix indexing, but the sim uses Cartesian indexing.
-          Λ   y i.e. j  Cartesian     ─┼─> j i.e. "x"  Graphics
+         Λ   y i.e. j  Cartesian     ─┼─> j i.e. "x"  Graphics
         ─┼─> x i.e. i                 V   i i.e. "y"
   The response: if the sim domain is rotated 90 deg relative to the actual
   domain, the transform is just to swap x and y. */
@@ -281,10 +281,11 @@ void loop(void)
   delete[] div_v;
   delete[] p;
 
+  // Advect color field on a temp field
   Vector3<UQ16> *c_temp = new Vector3<UQ16>[N_ROWS*N_COLS];
   advect(c_temp, color_field, velocity_field, N_ROWS, N_COLS, DT, false);
 
-  // Swap the color field with the advected one
+  // Swap the color field with the temp field, then delete
   xSemaphoreTake(color_consumed, portMAX_DELAY);
   SWAP(c_temp, color_field);
   delete[] c_temp;
