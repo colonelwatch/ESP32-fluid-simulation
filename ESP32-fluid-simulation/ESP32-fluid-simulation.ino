@@ -15,7 +15,6 @@
 #define SCALING 4  // determines size of sim domain, factor of 240 and 320
 #define DT (1 / 30.0f)  // s, size of sim time step (should match real FPS)
 #define POLLING_PERIOD 10  // ms, for the touch screen
-// #define DIVERGENCE_TRACKING  // enables divergence tracking (costs FPS)
 
 // draw defines
 #define SCREEN_ROTATION 1
@@ -133,45 +132,12 @@ void sim_routine(void* args)
     SWAP(c_temp, color_field);
     delete[] c_temp;
     xSemaphoreGive(color_produced);
-
-    #ifdef DIVERGENCE_TRACKING
-    // compute post-projection divergence
-    float *new_div_v = new float[N_ROWS * N_COLS];
-    calculate_divergence(new_div_v, velocity_field, N_ROWS, N_COLS, 1);
-
-    /* The continuity equation is ∂ρ/∂t = ∇ · (ρv). If hypothetically ρ were
-    constant everywhere, it becomes ∂ρ/∂t = ρ * (∇ · v). Therefore, (∇ · v)
-    alone, times a finite Δt, gives a factor by which ρ increases. */
-    int abs_argmax_ij = 0;
-    float abs_max = 0, worst_div_v;
-    for (int i = 0; i < N_ROWS; ++i) {
-      for (int j = 0; j < N_COLS; ++j) {
-        int ij = index(i, j, N_ROWS);
-        float abs_ij = fabsf(new_div_v[ij]);
-        if(abs_ij > abs_max) {
-          abs_max = abs_ij;
-          abs_argmax_ij = ij;
-        }
-      }
-    }
-    worst_div_v = new_div_v[abs_argmax_ij];
-
-    // Update stats tracker
-    local_stats.current_error = 100 * worst_div_v * DT;
-    if(local_stats.current_error > local_stats.max_error) {
-      local_stats.max_error = local_stats.current_error;
-    }
-
-    delete[] new_div_v;
-    #endif
   }
 }
 
 
 void draw_routine(void* args)
 {
-  Serial.begin(115200);
-
   tft.setRotation(SCREEN_ROTATION); // landscape rotation
   tft.init();
   tft.fillScreen(TFT_BLACK);
