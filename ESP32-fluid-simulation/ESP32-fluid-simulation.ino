@@ -33,9 +33,9 @@
 #define XPT2046_CLK  25
 #define XPT2046_CS   33
 
-// sim defines
-#define N_ROWS (SCREEN_HEIGHT / SCALING)
-#define N_COLS (SCREEN_WIDTH / SCALING)
+// sim defines (NOTE: one row and column are added as lerp endpoints)
+#define N_ROWS (SCREEN_HEIGHT / SCALING + 1)
+#define N_COLS (SCREEN_WIDTH / SCALING + 1)
 
 // macros
 #define SWAP(x, y) do { auto temp = (x); (x) = (y); (y) = temp; } while(0)
@@ -112,26 +112,18 @@ void draw_routine(void* args)
 
     tft.startWrite(); // start a single transfer for all the tiles
 
-    for (int i = 0; i < N_ROWS; i++) {
-      for (int j = 0; j < N_COLS; j++) {
-        int ij1, ij2, ij3, ij4;
+    // NOTE: the last row and column are just endpoints, with no screen-area
+    for (int i = 0; i < N_ROWS - 1; i++) {
+      for (int j = 0; j < N_COLS - 1; j++) {
         Vector3<float> c, dc;
         Vector3<float> interp[SCALING][SCALING + 1];
 
         /* Pull four points for bilinear interpolation, accounting for the sim
         domain being rotated and filling in points if on the boundary. */
-        bool is_right_border = (j == N_COLS - 1);
-        bool is_bottom_border = (i == N_ROWS - 1);
-        ij1 = index(i, j, N_ROWS);
-        ij2 = is_right_border ? ij1 : index(i, j + 1, N_ROWS);
-        ij3 = is_bottom_border ? ij1 : index(i + 1, j, N_ROWS);
-        if (!(is_right_border || is_bottom_border)) {
-          ij4 = index(i + 1, j + 1, N_ROWS);
-        }else if (is_right_border) {
-          ij4 = ij3;
-        } else {  // is_bottom_border
-          ij4 = ij2;
-        }
+        int ij1 = index(i, j, N_ROWS);
+        int ij2 = index(i, j + 1, N_ROWS);
+        int ij3 = index(i + 1, j, N_ROWS);
+        int ij4 = index(i + 1, j + 1, N_ROWS);
 
         /* Bilinear interpolation is "separable" (i.e. can be implemented as
         a sequence of 1D operations, usually for lower big-O overall), and it
