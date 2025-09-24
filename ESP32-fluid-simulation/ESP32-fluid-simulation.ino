@@ -114,9 +114,9 @@ void draw_routine(void* args)
 
     // NOTE: the last row and column are just endpoints, with no screen-area
     for (int i = 0; i < N_ROWS - 1; i++) {
+      Vector3<float> interp[SCALING][SCALING + 1];
       for (int j = 0; j < N_COLS - 1; j++) {
         Vector3<float> c, dc;
-        Vector3<float> interp[SCALING][SCALING + 1];
 
         /* Pull four points for bilinear interpolation, accounting for the sim
         domain being rotated and filling in points if on the boundary. */
